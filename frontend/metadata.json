@@ -1,0 +1,6 @@
+{
+  "name": "Benvenuta Lavinia",
+  "description": "Una pagina di benvenuto personalizzata ed elegante per Lavinia, programmatrice backend.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
