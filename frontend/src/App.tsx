@@ -102,24 +102,40 @@ const AppLogo = () => {
   );
 };
 
-// Preset Avatars definition
-export interface PresetAvatar {
-  id: string;
-  label: string;
-  gender: 'Donna' | 'Uomo';
-  url: string;
-}
-
-export const PRESET_AVATARS: PresetAvatar[] = [
-  { id: 'f_blonde', label: 'Donna Bionda', gender: 'Donna', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sofia&top=longHair&hairColor=blonde&skinColor=f8d25c' },
-  { id: 'f_mora', label: 'Donna Mora', gender: 'Donna', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Chiara&top=straight01&hairColor=black&skinColor=f8d25c' },
-  { id: 'f_castana', label: 'Donna Castana', gender: 'Donna', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Giulia&top=straight02&hairColor=brown&skinColor=f8d25c' },
-  { id: 'f_rossa', label: 'Donna Rossa', gender: 'Donna', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sara&top=curly&hairColor=red&skinColor=f8d25c' },
-  { id: 'm_moro', label: 'Uomo Moro', gender: 'Uomo', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Luca&top=shortFlat&hairColor=black&skinColor=f8d25c' },
-  { id: 'm_biondo', label: 'Uomo Biondo', gender: 'Uomo', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Marco&top=shortRound&hairColor=blonde&skinColor=f8d25c' },
-  { id: 'm_castano', label: 'Uomo Castano', gender: 'Uomo', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Matteo&top=shortWaved&hairColor=brown&skinColor=f8d25c' },
-  { id: 'm_riccio', label: 'Uomo Riccio', gender: 'Uomo', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Andrea&top=curly&hairColor=black&skinColor=f8d25c' },
+// Preset Emoji Avatars
+export const EMOJI_AVATARS: string[] = [
+  // Felici & Sorridenti
+  '😊', '🥳', '🤩', '😄', '😁', '🥰', '🤗', '😃',
+  // Simpatici, Buffi & Personaggi
+  '😎', '🤠', '😜', '👻', '🤖', '🦊', '🐱', '🦄', 
+  // Espressivi & Tristi/Pensierosi
+  '🥺', '😢', '😌', '😴', '🤔', '😏', '🤐', '🙃',
+  // Simboli & Icone
+  '👑', '🔥', '⚡', '🌟', '🚀', '🎨', '💎', '🍀'
 ];
+
+export const UserAvatar = ({ avatar, className = "w-8 h-8 text-base" }: { avatar?: string; className?: string }) => {
+  const isUrl = avatar && (avatar.startsWith('http') || avatar.startsWith('data:image'));
+  if (isUrl) {
+    return (
+      <img 
+        src={avatar} 
+        alt="Avatar" 
+        referrerPolicy="no-referrer"
+        className={`${className} rounded-full object-cover border border-amber-500/30 bg-stone-100 dark:bg-zinc-800 shrink-0`}
+        onError={(e) => {
+          (e.target as HTMLElement).style.display = 'none';
+        }}
+      />
+    );
+  }
+  const emoji = avatar && avatar.trim() ? avatar : '😊';
+  return (
+    <div className={`${className} rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shadow-xs shrink-0 select-none`}>
+      <span className="leading-none">{emoji}</span>
+    </div>
+  );
+};
 
 const AvatarSelector = ({ 
   selectedUrl, 
@@ -133,35 +149,27 @@ const AvatarSelector = ({
   return (
     <div>
       <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-2 font-semibold">
-        Scegli Avatar Profilo
+        Scegli Emoji Avatar
       </label>
-      <div className="grid grid-cols-4 gap-2">
-        {PRESET_AVATARS.map((av) => {
-          const isSelected = selectedUrl === av.url;
+      <div className="grid grid-cols-8 gap-2">
+        {EMOJI_AVATARS.map((emoji, index) => {
+          const isSelected = selectedUrl === emoji;
           return (
             <button
               type="button"
-              key={av.id}
-              onClick={() => onSelect(av.url)}
-              className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition cursor-pointer relative ${
+              key={index}
+              onClick={() => onSelect(emoji)}
+              className={`h-10 rounded-xl border flex items-center justify-center text-xl transition cursor-pointer relative hover:scale-105 active:scale-95 ${
                 isSelected 
-                  ? 'border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30' 
+                  ? 'border-amber-500 bg-amber-500/20 ring-2 ring-amber-500/40' 
                   : isDarkMode 
-                    ? 'border-zinc-800 bg-zinc-950 hover:border-zinc-700' 
-                    : 'border-stone-200 bg-stone-50 hover:border-stone-300'
+                    ? 'border-zinc-800 bg-zinc-950 hover:border-zinc-700 hover:bg-zinc-800/50' 
+                    : 'border-stone-200 bg-stone-50 hover:border-stone-300 hover:bg-stone-100'
               }`}
             >
-              <img 
-                src={av.url} 
-                alt={av.label} 
-                className="w-9 h-9 rounded-full bg-stone-200 dark:bg-zinc-800 object-cover"
-                referrerPolicy="no-referrer"
-              />
-              <span className="text-[10px] font-mono text-center line-clamp-1 opacity-90 leading-tight">
-                {av.label}
-              </span>
+              <span className="select-none">{emoji}</span>
               {isSelected && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-900" />
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-900" />
               )}
             </button>
           );
@@ -187,7 +195,7 @@ export default function App() {
     if (saved) {
       try { 
         const parsed = JSON.parse(saved);
-        if (!parsed.avatarUrl) parsed.avatarUrl = PRESET_AVATARS[0].url;
+        if (!parsed.avatarUrl || parsed.avatarUrl.startsWith('http')) parsed.avatarUrl = '😊';
         return parsed;
       } catch (e) { /* ignore */ }
     }
@@ -196,7 +204,7 @@ export default function App() {
       name: '',
       password: '',
       email: '',
-      avatarUrl: PRESET_AVATARS[0].url,
+      avatarUrl: '😊',
       preferredLang: 'Italiano'
     };
   });
@@ -671,12 +679,7 @@ export default function App() {
               className="flex items-center gap-2 cursor-pointer group shrink-0"
               title="Configura Profilo"
             >
-              <img 
-                src={profile.avatarUrl || PRESET_AVATARS[0].url} 
-                alt={profile.name} 
-                referrerPolicy="no-referrer"
-                className="h-8 w-8 rounded-full object-cover border border-amber-500/30 group-hover:border-amber-500 transition-colors bg-stone-100 dark:bg-zinc-800"
-              />
+              <UserAvatar avatar={profile.avatarUrl} className="w-8 h-8 text-base group-hover:scale-105 transition-transform" />
               <span className="text-xs font-mono font-medium hidden sm:inline-block max-w-[100px] truncate">
                 {profile.name}
               </span>
