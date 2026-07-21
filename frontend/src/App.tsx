@@ -9,7 +9,7 @@ import {
   Terminal, Heart, Coffee, Code, Sparkles, Cpu, Layers, 
   Check, Copy, User, Sun, Moon, Save, Plus, Trash2, Calendar as CalendarIcon,
   TrendingUp, TrendingDown, CreditCard, DollarSign, BookOpen, ChevronLeft, ChevronRight,
-  Folder, FolderOpen, FileCode, CheckCircle, HelpCircle, Activity, PiggyBank, Briefcase
+  Folder, FolderOpen, FileCode, CheckCircle, HelpCircle, Activity, PiggyBank, Briefcase, LogOut
 } from 'lucide-react';
 import { javaProjectStructure, JavaFile, JavaFolder } from './data/javaStructure';
 
@@ -684,6 +684,18 @@ export default function App() {
                 {profile.name}
               </span>
             </div>
+
+            {/* Logout button */}
+            <button
+              onClick={() => {
+                setIsLoggedIn(false);
+                setIsEditingProfile(false);
+              }}
+              className={`p-2 rounded-lg border transition-all cursor-pointer flex items-center justify-center text-rose-500 hover:bg-rose-500/10 ${isDarkMode ? 'border-zinc-800' : 'border-stone-200'}`}
+              title="Disconnetti / Esci"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
       </nav>
@@ -694,15 +706,36 @@ export default function App() {
           <motion.div 
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`max-w-md w-full rounded-2xl border p-8 shadow-md transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'}`}
+            className={`max-w-md w-full rounded-2xl border p-6 md:p-8 shadow-md transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'}`}
           >
-            <div className="text-center mb-6">
+            <div className="text-center mb-5">
               <div className="w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden mx-auto mb-3 border border-amber-500/20 shadow-md">
                 <AppLogo />
               </div>
               <h1 className="text-2.5xl font-semibold tracking-tight">Aura Calendario & Finanza</h1>
               <p className="text-xs text-zinc-550 dark:text-zinc-400 mt-1">Crea o conferma il tuo profilo per iniziare a pianificare entrate, uscite e annotare le tue giornate.</p>
             </div>
+
+            {/* Prominent Quick Access Button at the very top */}
+            <button
+              type="button"
+              onClick={() => {
+                setProfile({
+                  id: '1',
+                  name: 'Lavinia',
+                  password: 'password123',
+                  email: 'lavinia@example.com',
+                  avatarUrl: '😊',
+                  preferredLang: 'Italiano'
+                });
+                setInitialCard(parseFloat(tempInitialCard) || 0);
+                setInitialCash(parseFloat(tempInitialCash) || 0);
+                setIsLoggedIn(true);
+              }}
+              className="w-full mb-5 py-3 px-4 rounded-xl border border-amber-500/50 bg-amber-500/20 hover:bg-amber-500/30 text-amber-600 dark:text-amber-400 font-bold text-sm shadow-xs transition cursor-pointer flex items-center justify-center gap-2 font-mono ring-2 ring-amber-500/20"
+            >
+              <span>✨</span> ACCESSO RAPIDO DEMO (LAVINIA)
+            </button>
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
@@ -1214,6 +1247,17 @@ export default function App() {
                         className="w-full py-2 rounded-lg bg-emerald-600 text-white font-bold transition hover:opacity-90 cursor-pointer text-center flex items-center justify-center gap-1.5"
                       >
                         <Save className="w-3.5 h-3.5" /> Salva Profilo
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsLoggedIn(false);
+                          setIsEditingProfile(false);
+                        }}
+                        className="w-full py-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-500 font-semibold transition hover:bg-rose-500/20 cursor-pointer text-center flex items-center justify-center gap-1.5"
+                      >
+                        <LogOut className="w-3.5 h-3.5" /> Esci / Disconnetti
                       </button>
                     </form>
                   </motion.div>
