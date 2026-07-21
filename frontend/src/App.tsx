@@ -765,6 +765,26 @@ export default function App() {
               >
                 Inizia Sviluppo & Pianificazione
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setProfile({
+                    id: '1',
+                    name: 'Lavinia',
+                    password: 'password123',
+                    email: 'lavinia@example.com',
+                    avatarUrl: '😊',
+                    preferredLang: 'Italiano'
+                  });
+                  setInitialCard(parseFloat(tempInitialCard) || 0);
+                  setInitialCash(parseFloat(tempInitialCash) || 0);
+                  setIsLoggedIn(true);
+                }}
+                className="w-full py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold text-xs transition hover:bg-amber-500/20 cursor-pointer flex items-center justify-center gap-1 font-mono"
+              >
+                ✨ Accesso Rapido Demo (Lavinia)
+              </button>
             </form>
 
             <div className="mt-6 pt-4 border-t border-stone-100 dark:border-zinc-800 text-center">
