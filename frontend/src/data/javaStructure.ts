@@ -551,6 +551,8 @@ import java.util.Optional;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByName(String name);
+    boolean existsByName(String name);
     Optional<User> findByEmail(String email);
     boolean existsByEmail(String email);
 }`
@@ -650,13 +652,11 @@ public record DailyNoteDto(
                               language: "java",
                               code: `package com.finance.dto;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 public record LoginRequest(
-    @NotBlank(message = "L'email è obbligatoria")
-    @Email(message = "Formato email non valido")
-    String email,
+    @NotBlank(message = "Il nome utente è obbligatorio")
+    String username,
     
     @NotBlank(message = "La password è obbligatoria")
     String password
@@ -866,7 +866,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserDto login(LoginRequest loginRequest) {
-        User user = userRepository.findByEmail(loginRequest.email())
+        User user = userRepository.findByName(loginRequest.username())
             .orElseThrow(() -> new IllegalArgumentException("Credenziali non valide"));
         if (!user.getPassword().equals(loginRequest.password())) {
             throw new IllegalArgumentException("Credenziali non valide");
@@ -894,12 +894,12 @@ public class UserServiceImpl implements UserService {
                   path: "backend/src/main/resources/application.properties",
                   language: "properties",
                   code: `spring.application.name=finance-scheduler
-server.port=8080
+server.port=\${PORT:8080}
 
-# Database Configuration (MySQL)
-spring.datasource.url=jdbc:mysql://localhost:3306/finance_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
-spring.datasource.username=root
-spring.datasource.password=TUA_PASSWORD_DI_MYSQL
+# Database Configuration (MySQL con supporto a Railway e locale)
+spring.datasource.url=\${MYSQLURL:jdbc:mysql://\${MYSQLHOST:localhost}:\${MYSQLPORT:3306}/\${MYSQLDATABASE:finance_db}?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC}
+spring.datasource.username=\${MYSQLUSER:root}
+spring.datasource.password=\${MYSQLPASSWORD:lavinia}
 spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
 
 # JPA / Hibernate Configuration

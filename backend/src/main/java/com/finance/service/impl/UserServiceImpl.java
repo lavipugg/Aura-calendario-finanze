@@ -20,20 +20,20 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserDto register(UserDto userDto) {
-        if (userRepository.existsByEmail(userDto.email())) {
-            throw new IllegalArgumentException("Email già registrata");
+        if (userRepository.existsByName(userDto.name())) {
+            throw new IllegalArgumentException("Nome utente già registrato");
         }
         User user = new User();
         user.setName(userDto.name());
-        user.setEmail(userDto.email());
-        user.setPassword(userDto.password()); // Per semplicità in chiaro, in produzione usa BCrypt
+        user.setEmail(userDto.email() != null ? userDto.email() : userDto.name() + "@app.local");
+        user.setPassword(userDto.password());
         User saved = userRepository.save(user);
         return new UserDto(saved.getId(), saved.getName(), saved.getEmail(), null);
     }
 
     @Override
     public UserDto login(LoginRequest loginRequest) {
-        User user = userRepository.findByEmail(loginRequest.email())
+        User user = userRepository.findByName(loginRequest.username())
             .orElseThrow(() -> new IllegalArgumentException("Credenziali non valide"));
         if (!user.getPassword().equals(loginRequest.password())) {
             throw new IllegalArgumentException("Credenziali non valide");

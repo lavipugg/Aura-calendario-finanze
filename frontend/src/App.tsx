@@ -33,7 +33,8 @@ interface DailyNote {
 interface UserProfile {
   id: string;
   name: string;
-  email: string;
+  password?: string;
+  email?: string;
   avatarUrl: string;
   preferredLang: string;
 }
@@ -100,6 +101,7 @@ export default function App() {
     return {
       id: '1',
       name: '',
+      password: '',
       email: '',
       avatarUrl: '',
       preferredLang: 'Italiano'
@@ -109,7 +111,8 @@ export default function App() {
   // Edit profile state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [tempName, setTempName] = useState(profile.name);
-  const [tempEmail, setTempEmail] = useState(profile.email);
+  const [tempPassword, setTempPassword] = useState(profile.password || '');
+  const [tempEmail, setTempEmail] = useState(profile.email || '');
   const [tempAvatarUrl, setTempAvatarUrl] = useState(profile.avatarUrl);
 
   // Authentication State
@@ -287,7 +290,8 @@ export default function App() {
   useEffect(() => {
     if (isEditingProfile) {
       setTempName(profile.name);
-      setTempEmail(profile.email);
+      setTempPassword(profile.password || '');
+      setTempEmail(profile.email || '');
       setTempAvatarUrl(profile.avatarUrl);
       setTempInitialCard(initialCard.toString());
       setTempInitialCash(initialCash.toString());
@@ -300,6 +304,7 @@ export default function App() {
     const updated = {
       ...profile,
       name: tempName,
+      password: tempPassword,
       email: tempEmail,
       avatarUrl: tempAvatarUrl
     };
@@ -625,13 +630,13 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1.5 font-semibold">Indirizzo Email</label>
+                <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1.5 font-semibold">Password</label>
                 <input 
-                  type="email" 
+                  type="password" 
                   required
-                  placeholder="Es. mario@example.com"
-                  value={profile.email}
-                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                  placeholder="Inserisci la tua password"
+                  value={profile.password || ''}
+                  onChange={(e) => setProfile({ ...profile, password: e.target.value })}
                   className={`w-full rounded-lg px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-1 ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-zinc-700 focus:ring-zinc-700' : 'bg-stone-50 border-stone-200 text-stone-800 focus:border-stone-400 focus:ring-stone-400'}`}
                 />
               </div>
@@ -1051,7 +1056,7 @@ export default function App() {
 
                     <form onSubmit={handleSaveProfile} className="space-y-4 text-xs font-mono">
                       <div>
-                        <label className="block text-gray-400 uppercase mb-1">Nome Sviluppatrice</label>
+                        <label className="block text-gray-400 uppercase mb-1">Nome Utente</label>
                         <input 
                           type="text" 
                           required
@@ -1062,12 +1067,12 @@ export default function App() {
                       </div>
 
                       <div>
-                        <label className="block text-gray-400 uppercase mb-1">Email</label>
+                        <label className="block text-gray-400 uppercase mb-1">Password</label>
                         <input 
-                          type="email" 
+                          type="password" 
                           required
-                          value={tempEmail}
-                          onChange={(e) => setTempEmail(e.target.value)}
+                          value={tempPassword}
+                          onChange={(e) => setTempPassword(e.target.value)}
                           className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
                         />
                       </div>
