@@ -99,9 +99,9 @@ export default function App() {
     }
     return {
       id: '1',
-      name: 'Lavinia',
-      email: 'lavipugg@gmail.com',
-      avatarUrl: '/src/assets/images/app_logo_1784475828044.jpg',
+      name: '',
+      email: '',
+      avatarUrl: '',
       preferredLang: 'Italiano'
     };
   });
@@ -153,13 +153,7 @@ export default function App() {
         }));
       } catch (e) { /* ignore */ }
     }
-    // Default initial transactions for demonstration
-    return [
-      { id: 'tx-1', date: '2026-07-15', amount: 1500, type: 'ENTRATA', method: 'CARTA', category: 'STIPENDIO', notes: 'Primo stipendio mensile' },
-      { id: 'tx-2', date: '2026-07-16', amount: 45, type: 'USCITA', method: 'CARTA', category: 'BENZINA', notes: 'Rifornimento Eni' },
-      { id: 'tx-3', date: '2026-07-17', amount: 15, type: 'USCITA', method: 'CONTANTI', category: 'ALCOL', notes: 'Aperitivo post-lavoro' },
-      { id: 'tx-4', date: '2026-07-18', amount: 120, type: 'USCITA', method: 'CARTA', category: 'SHOPPING', notes: 'Acquisto tastiera meccanica per STS' }
-    ];
+    return [];
   });
 
   const [dailyNotes, setDailyNotes] = useState<DailyNote[]>(() => {
@@ -167,14 +161,12 @@ export default function App() {
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { /* ignore */ }
     }
-    return [
-      { date: '2026-07-18', content: 'Oggi ho iniziato a strutturare l\'architettura del backend in Java 21 utilizzando STS. Ho pianificato la divisione in controller, service, repository ed entità. Super motivata!', emotions: ['produttiva', 'motivata'] }
-    ];
+    return [];
   });
 
   // Calendar State
-  const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 6, 18)); // July 18, 2026
-  const [selectedDateStr, setSelectedDateStr] = useState<string>('2026-07-18');
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // Input states for new transaction on selected day
   const [txAmount, setTxAmount] = useState<string>('');
@@ -625,6 +617,7 @@ export default function App() {
                 <input 
                   type="text" 
                   required
+                  placeholder="Es. Mario Rossi"
                   value={profile.name}
                   onChange={(e) => setProfile({ ...profile, name: e.target.value })}
                   className={`w-full rounded-lg px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-1 ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-zinc-700 focus:ring-zinc-700' : 'bg-stone-50 border-stone-200 text-stone-800 focus:border-stone-400 focus:ring-stone-400'}`}
@@ -636,6 +629,7 @@ export default function App() {
                 <input 
                   type="email" 
                   required
+                  placeholder="Es. mario@example.com"
                   value={profile.email}
                   onChange={(e) => setProfile({ ...profile, email: e.target.value })}
                   className={`w-full rounded-lg px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-1 ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-zinc-700 focus:ring-zinc-700' : 'bg-stone-50 border-stone-200 text-stone-800 focus:border-stone-400 focus:ring-stone-400'}`}
@@ -643,9 +637,10 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1.5 font-semibold">Avatar URL</label>
+                <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1.5 font-semibold">Avatar URL (Opzionale)</label>
                 <input 
                   type="url" 
+                  placeholder="https://... (opzionale)"
                   value={profile.avatarUrl}
                   onChange={(e) => setProfile({ ...profile, avatarUrl: e.target.value })}
                   className={`w-full rounded-lg px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-1 ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-zinc-700 focus:ring-zinc-700' : 'bg-stone-50 border-stone-200 text-stone-800 focus:border-stone-400 focus:ring-stone-400'}`}
@@ -1056,7 +1051,7 @@ export default function App() {
 
                     <form onSubmit={handleSaveProfile} className="space-y-4 text-xs font-mono">
                       <div>
-                        <label className="block text-gray-400 uppercase mb-1">Nome Utente</label>
+                        <label className="block text-gray-400 uppercase mb-1">Nome Sviluppatrice</label>
                         <input 
                           type="text" 
                           required
