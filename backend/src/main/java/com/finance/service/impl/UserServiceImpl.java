@@ -21,14 +21,14 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserDto register(UserDto userDto) {
         if (userRepository.existsByName(userDto.name())) {
-            throw new IllegalArgumentException("Nome utente già registrato");
+            throw new IllegalArgumentException("Nome utente già esistente");
         }
         User user = new User();
         user.setName(userDto.name());
-        user.setEmail(userDto.email() != null ? userDto.email() : userDto.name() + "@app.local");
-        user.setPassword(userDto.password());
+        user.setPassword(userDto.password()); // In produzione va cifrata (es. BCrypt)
+        user.setAvatarUrl(userDto.avatarUrl());
         User saved = userRepository.save(user);
-        return new UserDto(saved.getId(), saved.getName(), saved.getEmail(), null);
+        return new UserDto(saved.getId(), saved.getName(), saved.getEmail(), null, saved.getAvatarUrl());
     }
 
     @Override
@@ -38,6 +38,6 @@ public class UserServiceImpl implements UserService {
         if (!user.getPassword().equals(loginRequest.password())) {
             throw new IllegalArgumentException("Credenziali non valide");
         }
-        return new UserDto(user.getId(), user.getName(), user.getEmail(), null);
+        return new UserDto(user.getId(), user.getName(), user.getEmail(), null, user.getAvatarUrl());
     }
 }

@@ -15,11 +15,12 @@ public class User {
     @Column(nullable = false)
     private String name;
     
-    @Column(nullable = false, unique = true)
     private String email;
     
     @Column(nullable = false)
     private String password;
+    
+    private String avatarUrl;
     
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Transaction> transactions = new ArrayList<>();
@@ -27,7 +28,6 @@ public class User {
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DailyNote> dailyNotes = new ArrayList<>();
 
-    // GETTER E SETTER MANUALI (Senza Lombok)
     public Long getId() {
         return id;
     }
@@ -58,6 +58,14 @@ public class User {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
     }
 
     public List<Transaction> getTransactions() {

@@ -82,6 +82,95 @@ const DEFAULT_CATEGORIES: Category[] = [
   { id: 'VITA', label: 'Vita', color: 'bg-teal-500', isIncome: false },
 ];
 
+// AppLogo fallback component
+const AppLogo = () => {
+  const [hasError, setHasError] = useState(false);
+  if (hasError) {
+    return (
+      <div className="w-full h-full bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold font-mono text-xs shadow-inner">
+        ✨ A
+      </div>
+    );
+  }
+  return (
+    <img 
+      src="/src/assets/images/app_logo_1784475828044.jpg" 
+      alt="Aura Logo" 
+      className="w-full h-full object-cover"
+      onError={() => setHasError(true)}
+    />
+  );
+};
+
+// Preset Avatars definition
+export interface PresetAvatar {
+  id: string;
+  label: string;
+  gender: 'Donna' | 'Uomo';
+  url: string;
+}
+
+export const PRESET_AVATARS: PresetAvatar[] = [
+  { id: 'f_blonde', label: 'Donna Bionda', gender: 'Donna', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sofia&top=longHair&hairColor=blonde&skinColor=f8d25c' },
+  { id: 'f_mora', label: 'Donna Mora', gender: 'Donna', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Chiara&top=straight01&hairColor=black&skinColor=f8d25c' },
+  { id: 'f_castana', label: 'Donna Castana', gender: 'Donna', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Giulia&top=straight02&hairColor=brown&skinColor=f8d25c' },
+  { id: 'f_rossa', label: 'Donna Rossa', gender: 'Donna', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sara&top=curly&hairColor=red&skinColor=f8d25c' },
+  { id: 'm_moro', label: 'Uomo Moro', gender: 'Uomo', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Luca&top=shortFlat&hairColor=black&skinColor=f8d25c' },
+  { id: 'm_biondo', label: 'Uomo Biondo', gender: 'Uomo', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Marco&top=shortRound&hairColor=blonde&skinColor=f8d25c' },
+  { id: 'm_castano', label: 'Uomo Castano', gender: 'Uomo', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Matteo&top=shortWaved&hairColor=brown&skinColor=f8d25c' },
+  { id: 'm_riccio', label: 'Uomo Riccio', gender: 'Uomo', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Andrea&top=curly&hairColor=black&skinColor=f8d25c' },
+];
+
+const AvatarSelector = ({ 
+  selectedUrl, 
+  onSelect,
+  isDarkMode 
+}: { 
+  selectedUrl: string; 
+  onSelect: (url: string) => void;
+  isDarkMode: boolean;
+}) => {
+  return (
+    <div>
+      <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-2 font-semibold">
+        Scegli Avatar Profilo
+      </label>
+      <div className="grid grid-cols-4 gap-2">
+        {PRESET_AVATARS.map((av) => {
+          const isSelected = selectedUrl === av.url;
+          return (
+            <button
+              type="button"
+              key={av.id}
+              onClick={() => onSelect(av.url)}
+              className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition cursor-pointer relative ${
+                isSelected 
+                  ? 'border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30' 
+                  : isDarkMode 
+                    ? 'border-zinc-800 bg-zinc-950 hover:border-zinc-700' 
+                    : 'border-stone-200 bg-stone-50 hover:border-stone-300'
+              }`}
+            >
+              <img 
+                src={av.url} 
+                alt={av.label} 
+                className="w-9 h-9 rounded-full bg-stone-200 dark:bg-zinc-800 object-cover"
+                referrerPolicy="no-referrer"
+              />
+              <span className="text-[10px] font-mono text-center line-clamp-1 opacity-90 leading-tight">
+                {av.label}
+              </span>
+              {isSelected && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-900" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   // Theme state
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -96,14 +185,18 @@ export default function App() {
   const [profile, setProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('lavinia_finance_user');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+      try { 
+        const parsed = JSON.parse(saved);
+        if (!parsed.avatarUrl) parsed.avatarUrl = PRESET_AVATARS[0].url;
+        return parsed;
+      } catch (e) { /* ignore */ }
     }
     return {
       id: '1',
       name: '',
       password: '',
       email: '',
-      avatarUrl: '',
+      avatarUrl: PRESET_AVATARS[0].url,
       preferredLang: 'Italiano'
     };
   });
@@ -551,11 +644,7 @@ export default function App() {
       <nav className={`h-16 border-b px-4 md:px-8 flex items-center justify-between shadow-xs z-20 transition-colors duration-300 ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'}`}>
         <div className="flex items-center space-x-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden border border-amber-500/20 shadow-xs shrink-0">
-            <img 
-              src="/src/assets/images/app_logo_1784475828044.jpg" 
-              alt="Aura Logo" 
-              className="w-full h-full object-cover"
-            />
+            <AppLogo />
           </div>
           <div className="flex flex-col">
             <span className="font-semibold tracking-tight text-sm md:text-base leading-none">Aura Calendario & Finanza</span>
@@ -583,10 +672,10 @@ export default function App() {
               title="Configura Profilo"
             >
               <img 
-                src={profile.avatarUrl} 
+                src={profile.avatarUrl || PRESET_AVATARS[0].url} 
                 alt={profile.name} 
                 referrerPolicy="no-referrer"
-                className="h-8 w-8 rounded-full object-cover border border-amber-500/30 group-hover:border-amber-500 transition-colors"
+                className="h-8 w-8 rounded-full object-cover border border-amber-500/30 group-hover:border-amber-500 transition-colors bg-stone-100 dark:bg-zinc-800"
               />
               <span className="text-xs font-mono font-medium hidden sm:inline-block max-w-[100px] truncate">
                 {profile.name}
@@ -606,11 +695,7 @@ export default function App() {
           >
             <div className="text-center mb-6">
               <div className="w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden mx-auto mb-3 border border-amber-500/20 shadow-md">
-                <img 
-                  src="/src/assets/images/app_logo_1784475828044.jpg" 
-                  alt="Aura Logo" 
-                  className="w-full h-full object-cover"
-                />
+                <AppLogo />
               </div>
               <h1 className="text-2.5xl font-semibold tracking-tight">Aura Calendario & Finanza</h1>
               <p className="text-xs text-zinc-550 dark:text-zinc-400 mt-1">Crea o conferma il tuo profilo per iniziare a pianificare entrate, uscite e annotare le tue giornate.</p>
@@ -641,16 +726,11 @@ export default function App() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1.5 font-semibold">Avatar URL (Opzionale)</label>
-                <input 
-                  type="url" 
-                  placeholder="https://... (opzionale)"
-                  value={profile.avatarUrl}
-                  onChange={(e) => setProfile({ ...profile, avatarUrl: e.target.value })}
-                  className={`w-full rounded-lg px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-1 ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-zinc-700 focus:ring-zinc-700' : 'bg-stone-50 border-stone-200 text-stone-800 focus:border-stone-400 focus:ring-stone-400'}`}
-                />
-              </div>
+              <AvatarSelector 
+                selectedUrl={profile.avatarUrl} 
+                onSelect={(url) => setProfile({ ...profile, avatarUrl: url })} 
+                isDarkMode={isDarkMode} 
+              />
 
               {/* Starting Balances */}
               <div className="grid grid-cols-2 gap-3.5 pt-1">
@@ -1077,15 +1157,11 @@ export default function App() {
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-gray-400 uppercase mb-1">Immagine Profilo URL</label>
-                        <input 
-                          type="url" 
-                          value={tempAvatarUrl}
-                          onChange={(e) => setTempAvatarUrl(e.target.value)}
-                          className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
-                        />
-                      </div>
+                      <AvatarSelector 
+                        selectedUrl={tempAvatarUrl} 
+                        onSelect={(url) => setTempAvatarUrl(url)} 
+                        isDarkMode={isDarkMode} 
+                      />
 
                       <div className="grid grid-cols-2 gap-3.5">
                         <div>
