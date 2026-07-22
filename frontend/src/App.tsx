@@ -1,5 +1,10 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Terminal, Heart, Coffee, Code, Sparkles, Cpu, Layers, 
   Check, Copy, User, Sun, Moon, Save, Plus, Trash2, Calendar as CalendarIcon,
@@ -7,7 +12,7 @@ import {
   Folder, FolderOpen, FileCode, CheckCircle, HelpCircle, Activity, PiggyBank, Briefcase, LogOut, Wifi, Cloud
 } from 'lucide-react';
 import { javaProjectStructure, JavaFile, JavaFolder } from './data/javaStructure';
-import { collection, doc, setDoc, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from './lib/firebase';
 
 // Standard Interfaces
@@ -15,7 +20,7 @@ interface Transaction {
   id: string;
   date: string; // YYYY-MM-DD
   amount: number;
-  type: 'INCOME' | 'EXPENSE';
+  type: 'ENTRATA' | 'USCITA';
   method: 'CARTA' | 'CONTANTI';
   category: string;
   notes: string;
@@ -24,7 +29,7 @@ interface Transaction {
 interface DailyNote {
   date: string; // YYYY-MM-DD
   content: string;
-  emotions: string[];
+  emotions?: string[];
 }
 
 interface UserProfile {
@@ -36,48 +41,151 @@ interface UserProfile {
   preferredLang: string;
 }
 
+// Emotions definitions
+export const EMOTIONS = [
+  { id: 'felice', label: 'Felice', emoji: '😊', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' },
+  { id: 'produttiva', label: 'Produttiva', emoji: '💻', color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20' },
+  { id: 'motivata', label: 'Motivata', emoji: '⚡', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' },
+  { id: 'rilassata', label: 'Rilassata', emoji: '🧘‍♀️', color: 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20' },
+  { id: 'ansiosa', label: 'Ansiosa', emoji: '😰', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20' },
+  { id: 'triste', label: 'Triste', emoji: '😢', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' },
+  { id: 'stanca', label: 'Stanca', emoji: '😴', color: 'bg-stone-500/10 text-stone-600 dark:text-stone-450 border-stone-500/20' },
+  { id: 'grata', label: 'Grata', emoji: '💖', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' },
+  { id: 'calma', label: 'Calma', emoji: '🍃', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' },
+  { id: 'soddisfazione', label: 'Soddisfazione', emoji: '✨', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' },
+  { id: 'sollievo', label: 'Sollievo', emoji: '😌', color: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20' },
+  { id: 'rabbia', label: 'Rabbia', emoji: '😡', color: 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20' },
+  { id: 'paura', label: 'Paura', emoji: '😨', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20' },
+  { id: 'vergogna', label: 'Vergogna', emoji: '😳', color: 'bg-pink-500/10 text-pink-600 dark:text-pink-400 border-pink-500/20' },
+  { id: 'senso_di_colpa', label: 'Senso di colpa', emoji: '😔', color: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20' },
+  { id: 'frustrazione', label: 'Frustrazione', emoji: '😤', color: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20' },
+  { id: 'confusione', label: 'Confusione', emoji: '😕', color: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20' }
+];
+
+// Category interface
 interface Category {
   id: string;
   label: string;
-  color: string; // Tailwind color class or hex string
+  color: string;
   isIncome: boolean;
 }
 
-// Preset Categories
+// Categories definitions
 const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'STIPENDIO', label: 'Stipendio / Entrate', color: 'emerald', isIncome: true },
-  { id: 'SPESA', label: 'Spesa Alimentare', color: 'indigo', isIncome: false },
-  { id: 'VITA', label: 'Vita Sociale & Svago', color: 'purple', isIncome: false },
-  { id: 'ALTRO', label: 'Altre Uscite', color: 'amber', isIncome: false }
+  { id: 'STIPENDIO', label: 'Stipendio / Entrata', color: 'bg-emerald-500', isIncome: true },
+  { id: 'ALCOL', label: 'Alcol', color: 'bg-red-500', isIncome: false },
+  { id: 'ALTRO', label: 'Altro', color: 'bg-gray-500', isIncome: false },
+  { id: 'APPLE', label: 'Apple', color: 'bg-zinc-800', isIncome: false },
+  { id: 'BENZINA', label: 'Benzina', color: 'bg-blue-500', isIncome: false },
+  { id: 'LIQUIDI', label: 'Liquidi', color: 'bg-cyan-500', isIncome: false },
+  { id: 'REGALI', label: 'Regali', color: 'bg-pink-500', isIncome: false },
+  { id: 'SHOPPING', label: 'Shopping', color: 'bg-purple-500', isIncome: false },
+  { id: 'SPESA', label: 'Spesa', color: 'bg-amber-500', isIncome: false },
+  { id: 'VITA', label: 'Vita', color: 'bg-teal-500', isIncome: false },
 ];
 
-// Presets for Avatar Picker
-const AVATAR_PRESETS = ['😊', '👩‍💻', '☕', '🌸', '✨', '💻', '🎨', '🚀'];
+// AppLogo fallback component
+const AppLogo = () => {
+  const [hasError, setHasError] = useState(false);
+  if (hasError) {
+    return (
+      <div className="w-full h-full bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold font-mono text-xs shadow-inner">
+        ✨ A
+      </div>
+    );
+  }
+  return (
+    <img 
+      src="/src/assets/images/app_logo_1784475828044.jpg" 
+      alt="Aura Logo" 
+      className="w-full h-full object-cover"
+      onError={() => setHasError(true)}
+    />
+  );
+};
 
-// Preset Colors for Custom Categories
-const CATEGORY_COLOR_PRESETS = [
-  { label: 'Viola', value: 'purple' },
-  { label: 'Rosa', value: 'pink' },
-  { label: 'Azzurro', value: 'cyan' },
-  { label: 'Verde', value: 'teal' },
-  { label: 'Arancione', value: 'orange' },
-  { label: 'Rosso', value: 'rose' }
+// Preset Emoji Avatars
+export const EMOJI_AVATARS: string[] = [
+  // Felici & Sorridenti
+  '😊', '🥳', '🤩', '😄', '😁', '🥰', '🤗', '😃',
+  // Simpatici, Buffi & Personaggi
+  '😎', '🤠', '😜', '👻', '🤖', '🦊', '🐱', '🦄', 
+  // Espressivi & Tristi/Pensierosi
+  '🥺', '😢', '😌', '😴', '🤔', '😏', '🤐', '🙃',
+  // Simboli & Icone
+  '👑', '🔥', '⚡', '🌟', '🚀', '🎨', '💎', '🍀'
 ];
 
-// Emotion Badges
-const EMOTIONS = [
-  { label: 'Produttiva', icon: '🚀' },
-  { label: 'Serena', icon: '🍃' },
-  { label: 'Stanca', icon: '😴' },
-  { label: 'Ispirata', icon: '💡' },
-  { label: 'Focalizzata', icon: '🎯' }
-];
+export const UserAvatar = ({ avatar, className = "w-8 h-8 text-base" }: { avatar?: string; className?: string }) => {
+  const isUrl = avatar && (avatar.startsWith('http') || avatar.startsWith('data:image'));
+  if (isUrl) {
+    return (
+      <img 
+        src={avatar} 
+        alt="Avatar" 
+        referrerPolicy="no-referrer"
+        className={`${className} rounded-full object-cover border border-amber-500/30 bg-stone-100 dark:bg-zinc-800 shrink-0`}
+        onError={(e) => {
+          (e.target as HTMLElement).style.display = 'none';
+        }}
+      />
+    );
+  }
+  const emoji = avatar && avatar.trim() ? avatar : '😊';
+  return (
+    <div className={`${className} rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shadow-xs shrink-0 select-none`}>
+      <span className="leading-none">{emoji}</span>
+    </div>
+  );
+};
 
-export function App() {
-  // Application / Development Console Theme state
+const AvatarSelector = ({ 
+  selectedUrl, 
+  onSelect,
+  isDarkMode 
+}: { 
+  selectedUrl: string; 
+  onSelect: (url: string) => void;
+  isDarkMode: boolean;
+}) => {
+  return (
+    <div>
+      <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-2 font-semibold">
+        Scegli Emoji Avatar
+      </label>
+      <div className="grid grid-cols-8 gap-2">
+        {EMOJI_AVATARS.map((emoji, index) => {
+          const isSelected = selectedUrl === emoji;
+          return (
+            <button
+              type="button"
+              key={index}
+              onClick={() => onSelect(emoji)}
+              className={`h-10 rounded-xl border flex items-center justify-center text-xl transition cursor-pointer relative hover:scale-105 active:scale-95 ${
+                isSelected 
+                  ? 'border-amber-500 bg-amber-500/20 ring-2 ring-amber-500/40' 
+                  : isDarkMode 
+                    ? 'border-zinc-800 bg-zinc-950 hover:border-zinc-700 hover:bg-zinc-800/50' 
+                    : 'border-stone-200 bg-stone-50 hover:border-stone-300 hover:bg-stone-100'
+              }`}
+            >
+              <span className="select-none">{emoji}</span>
+              {isSelected && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-900" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default function App() {
+  // Theme state
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('lavinia_devconsole_theme');
-    return saved ? saved === 'dark' : true;
+    return saved === 'dark';
   });
 
   // Current active main workspace tab
@@ -92,9 +200,10 @@ export function App() {
   const [profile, setProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('lavinia_finance_user');
     if (saved) {
-      try {
+      try { 
         const parsed = JSON.parse(saved);
-        if (parsed.name) return parsed;
+        if (!parsed.avatarUrl || parsed.avatarUrl.startsWith('http')) parsed.avatarUrl = '😊';
+        return parsed;
       } catch (e) { /* ignore */ }
     }
     return {
@@ -107,8 +216,8 @@ export function App() {
     };
   });
 
-  // Editing profile fields
-  const [isEditingProfile, setIsEditingProfile] = useState<boolean>(false);
+  // Edit profile state
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [tempName, setTempName] = useState(profile.name);
   const [tempPassword, setTempPassword] = useState(profile.password || '');
   const [tempEmail, setTempEmail] = useState(profile.email || '');
@@ -141,13 +250,13 @@ export function App() {
 
   // Calendar State
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  // Transaction form states
-  const [txType, setTxType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
-  const [txMethod, setTxMethod] = useState<'CARTA' | 'CONTANTI'>('CARTA');
-  const [txCategory, setTxCategory] = useState<string>('SPESA');
+  // Input states for new transaction on selected day
   const [txAmount, setTxAmount] = useState<string>('');
+  const [txType, setTxType] = useState<'ENTRATA' | 'USCITA'>('USCITA');
+  const [txMethod, setTxMethod] = useState<'CARTA' | 'CONTANTI'>('CARTA');
+  const [txCategory, setTxCategory] = useState<string>('ALTRO');
   const [txNotes, setTxNotes] = useState<string>('');
 
   // Dynamic categories state
@@ -155,25 +264,32 @@ export function App() {
 
   // New category creation form state
   const [newCatLabel, setNewCatLabel] = useState<string>('');
-  const [newCatColor, setNewCatColor] = useState<string>('purple');
+  const [newCatType, setNewCatType] = useState<'ENTRATA' | 'USCITA'>('USCITA');
+  const [newCatColor, setNewCatColor] = useState<string>('bg-teal-500');
 
-  // Daily note form state
+  // Personal notes input state for selected day
   const [dayNotesContent, setDayNotesContent] = useState<string>('');
   const [dayEmotions, setDayEmotions] = useState<string[]>([]);
 
-  // Java Backend Project Explorer State
-  const [selectedJavaFile, setSelectedJavaFile] = useState<JavaFile>(
-    javaProjectStructure[0].children?.[0]?.children?.[0] as JavaFile
+  // Java Explorer state
+  const [selectedJavaFile, setSelectedJavaFile] = useState<JavaFile | null>(
+    javaProjectStructure.folders?.[0].folders?.[0].folders?.[0].folders?.[0].folders?.[0].folders?.[0].files?.[1] || null // FinanceController.java by default
   );
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
-    'src': true,
-    'src/main': true,
-    'src/main/java': true,
-    'src/main/java/com/aura/finance': true,
-    'src/main/java/com/aura/finance/controller': true,
-    'src/main/java/com/aura/finance/model': true,
-    'src/main/java/com/aura/finance/repository': true,
-    'src/main/java/com/aura/finance/service': true,
+  // Track open folders in tree
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({
+    'backend': true,
+    'backend/src': true,
+    'backend/src/main': true,
+    'backend/src/main/java': true,
+    'backend/src/main/java/com': true,
+    'backend/src/main/java/com/finance': true,
+    'backend/src/main/java/com/finance/controller': true,
+    'backend/src/main/java/com/finance/entity': false,
+    'backend/src/main/java/com/finance/enums': false,
+    'backend/src/main/java/com/finance/repository': false,
+    'backend/src/main/java/com/finance/dto': false,
+    'backend/src/main/java/com/finance/service': false,
+    'backend/src/main/java/com/finance/service/impl': false,
   });
 
   const [copiedCode, setCopiedCode] = useState(false);
@@ -183,9 +299,54 @@ export function App() {
     localStorage.setItem('lavinia_devconsole_theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
+  // Migrate legacy root collection data (from older single-user setup) into user's subcollections if user has no transactions
+  const migrateLegacyDataIfNeeded = async (uid: string) => {
+    try {
+      const userTxsSnap = await getDocs(collection(db, 'users', uid, 'transactions'));
+      if (!userTxsSnap.empty) return; // User already has transactions, no migration needed
+
+      // Check legacy root collections
+      const rootTxsSnap = await getDocs(collection(db, 'transactions'));
+      const rootNotesSnap = await getDocs(collection(db, 'dailyNotes'));
+      const rootProfileSnap = await getDoc(doc(db, 'userProfile', 'mainProfile'));
+
+      // Copy root profile balances if legacy profile exists
+      if (rootProfileSnap.exists()) {
+        const rootData = rootProfileSnap.data();
+        if (typeof rootData.initialCard === 'number' || typeof rootData.initialCash === 'number') {
+          await setDoc(doc(db, 'users', uid), {
+            initialCard: rootData.initialCard ?? 1500,
+            initialCash: rootData.initialCash ?? 0
+          }, { merge: true });
+        }
+      }
+
+      // Copy root transactions to user's transactions
+      if (!rootTxsSnap.empty) {
+        for (const docSnap of rootTxsSnap.docs) {
+          const tx = docSnap.data();
+          await setDoc(doc(db, 'users', uid, 'transactions', docSnap.id), tx);
+        }
+      }
+
+      // Copy root daily notes to user's daily notes
+      if (!rootNotesSnap.empty) {
+        for (const docSnap of rootNotesSnap.docs) {
+          const note = docSnap.data();
+          await setDoc(doc(db, 'users', uid, 'dailyNotes', docSnap.id), note);
+        }
+      }
+    } catch (err) {
+      console.warn('Migration legacy check:', err);
+    }
+  };
+
   // Real-time Cloud Sync per Active User across PC & Mobile
   useEffect(() => {
     if (!isLoggedIn || !activeUserId) return;
+
+    // Run legacy migration if needed
+    migrateLegacyDataIfNeeded(activeUserId);
 
     // 1. Real-time Transactions Listener
     const unsubTxs = onSnapshot(collection(db, 'users', activeUserId, 'transactions'), (snapshot) => {
@@ -257,16 +418,19 @@ export function App() {
   // Ensure selected transaction category is always valid
   useEffect(() => {
     const expenseCats = categories.filter(c => !c.isIncome);
-    if (txType === 'EXPENSE' && expenseCats.length > 0) {
-      if (!expenseCats.some(c => c.id === txCategory)) {
-        setTxCategory(expenseCats[0].id);
-      }
-    } else if (txType === 'INCOME') {
-      setTxCategory('STIPENDIO');
+    if (expenseCats.length > 0 && !expenseCats.some(c => c.id === txCategory)) {
+      setTxCategory(expenseCats[0].id);
     }
-  }, [txType, categories, txCategory]);
+  }, [categories, txCategory]);
 
-  // Toggle Theme Function
+  // Update current day note text field and emotions when selected date changes
+  useEffect(() => {
+    const activeNote = dailyNotes.find(n => n.date === selectedDateStr);
+    setDayNotesContent(activeNote ? activeNote.content : '');
+    setDayEmotions(activeNote && activeNote.emotions ? activeNote.emotions : []);
+  }, [selectedDateStr, dailyNotes]);
+
+  // Toggle Dark Mode
   const handleThemeToggle = () => {
     setIsDarkMode(!isDarkMode);
   };
@@ -398,8 +562,8 @@ export function App() {
       const userRef = doc(db, 'users', uid);
       const userSnap = await getDoc(userRef);
 
-      let cardVal = 500;
-      let cashVal = 100;
+      let cardVal = 1500;
+      let cashVal = 0;
       let laviniaProfile = {
         id: uid,
         name: 'Lavinia',
@@ -420,8 +584,8 @@ export function App() {
         }
       } else {
         const data = userSnap.data();
-        cardVal = data.initialCard ?? 500;
-        cashVal = data.initialCash ?? 100;
+        cardVal = typeof data.initialCard === 'number' ? data.initialCard : 1500;
+        cashVal = typeof data.initialCash === 'number' ? data.initialCash : 0;
         laviniaProfile.name = data.name || 'Lavinia';
         laviniaProfile.avatarUrl = data.avatarUrl || '😊';
       }
@@ -498,23 +662,11 @@ export function App() {
   };
 
   // Format Helper: date string from Date object
-  const formatDateStr = (d: Date) => {
-    return d.toISOString().split('T')[0];
+  const formatDateString = (year: number, month: number, day: number): string => {
+    const mm = String(month + 1).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    return `${year}-${mm}-${dd}`;
   };
-
-  const selectedDateStr = formatDateStr(selectedDate);
-
-  // Sync selected day's note form with saved data
-  useEffect(() => {
-    const existing = dailyNotes.find(n => n.date === selectedDateStr);
-    if (existing) {
-      setDayNotesContent(existing.content);
-      setDayEmotions(existing.emotions || []);
-    } else {
-      setDayNotesContent('');
-      setDayEmotions([]);
-    }
-  }, [selectedDateStr, dailyNotes]);
 
   // Save note and emotions for currently selected day
   const handleSaveNote = () => {
@@ -535,12 +687,14 @@ export function App() {
   };
 
   // Toggle emotion helper
-  const toggleEmotion = (emotionLabel: string) => {
-    if (dayEmotions.includes(emotionLabel)) {
-      setDayEmotions(dayEmotions.filter(e => e !== emotionLabel));
-    } else {
-      setDayEmotions([...dayEmotions, emotionLabel]);
-    }
+  const handleToggleEmotion = (emotionId: string) => {
+    setDayEmotions(prev => {
+      if (prev.includes(emotionId)) {
+        return prev.filter(id => id !== emotionId);
+      } else {
+        return [...prev, emotionId];
+      }
+    });
   };
 
   // Add a financial transaction to current selected day
@@ -551,12 +705,12 @@ export function App() {
     if (isNaN(val) || val <= 0) return;
 
     const newTx: Transaction = {
-      id: Date.now().toString(),
+      id: `tx-${Date.now()}`,
       date: selectedDateStr,
       amount: val,
       type: txType,
       method: txMethod,
-      category: txCategory,
+      category: txType === 'ENTRATA' ? 'STIPENDIO' : txCategory,
       notes: txNotes.trim()
     };
 
@@ -585,9 +739,9 @@ export function App() {
     const labelUpper = newCatLabel.trim();
     const id = labelUpper.toUpperCase().replace(/\s+/g, '_');
 
-    // Check duplicate
-    if (categories.some(c => c.id === id || c.label.toLowerCase() === labelUpper.toLowerCase())) {
-      setNewCatLabel('');
+    // Prevent duplicate keys
+    if (categories.some(c => c.id === id)) {
+      alert("Questa categoria esiste già!");
       return;
     }
 
@@ -595,7 +749,7 @@ export function App() {
       id,
       label: labelUpper,
       color: newCatColor,
-      isIncome: false
+      isIncome: newCatType === 'ENTRATA'
     };
 
     setCategories(prev => {
@@ -622,141 +776,153 @@ export function App() {
   };
 
   // Finance calculations
-  const calculateTotalIncome = () => {
-    return transactions
-      .filter(t => t.type === 'INCOME')
+  const totalIncome = initialCard + initialCash + transactions.reduce((acc, t) => t.type === 'ENTRATA' ? acc + t.amount : acc, 0);
+  const totalExpenses = transactions.reduce((acc, t) => t.type === 'USCITA' ? acc + t.amount : acc, 0);
+  const balance = totalIncome - totalExpenses;
+
+  // Breakdown by method
+  const balanceOnCard = initialCard + transactions.reduce((acc, t) => {
+    if (t.method === 'CARTA') {
+      return t.type === 'ENTRATA' ? acc + t.amount : acc - t.amount;
+    }
+    return acc;
+  }, 0);
+
+  const balanceInCash = initialCash + transactions.reduce((acc, t) => {
+    if (t.method === 'CONTANTI') {
+      return t.type === 'ENTRATA' ? acc + t.amount : acc - t.amount;
+    }
+    return acc;
+  }, 0);
+
+  // Breakdown by category
+  const expensesByCategory = categories.reduce((acc, cat) => {
+    const total = transactions
+      .filter(t => t.type === 'USCITA' && t.category === cat.id)
       .reduce((sum, t) => sum + t.amount, 0);
-  };
-
-  const calculateTotalExpenses = () => {
-    return transactions
-      .filter(t => t.type === 'EXPENSE')
-      .reduce((sum, t) => sum + t.amount, 0);
-  };
-
-  // Card specific calculations
-  const calculateCardIncome = () => {
-    return transactions
-      .filter(t => t.type === 'INCOME' && t.method === 'CARTA')
-      .reduce((sum, t) => sum + t.amount, 0);
-  };
-
-  const calculateCardExpenses = () => {
-    return transactions
-      .filter(t => t.type === 'EXPENSE' && t.method === 'CARTA')
-      .reduce((sum, t) => sum + t.amount, 0);
-  };
-
-  // Cash specific calculations
-  const calculateCashIncome = () => {
-    return transactions
-      .filter(t => t.type === 'INCOME' && t.method === 'CONTANTI')
-      .reduce((sum, t) => sum + t.amount, 0);
-  };
-
-  const calculateCashExpenses = () => {
-    return transactions
-      .filter(t => t.type === 'EXPENSE' && t.method === 'CONTANTI')
-      .reduce((sum, t) => sum + t.amount, 0);
-  };
-
-  // Final Balances
-  const currentCardBalance = initialCard + calculateCardIncome() - calculateCardExpenses();
-  const currentCashBalance = initialCash + calculateCashIncome() - calculateCashExpenses();
-  const totalBalance = currentCardBalance + currentCashBalance;
-
-  // Selected date transactions
-  const selectedDayTransactions = transactions.filter(t => t.date === selectedDateStr);
+    acc[cat.id] = total;
+    return acc;
+  }, {} as Record<string, number>);
 
   // Calendar Helpers
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
+
+  // Monthly calculations based on the currently viewed calendar month
+  const currentMonthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+  
+  const monthlyTransactions = transactions.filter(t => t.date.startsWith(currentMonthPrefix));
+  
+  const monthlyTotalSpent = monthlyTransactions
+    .filter(t => t.type === 'USCITA')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const monthlyCashSpent = monthlyTransactions
+    .filter(t => t.type === 'USCITA' && t.method === 'CONTANTI')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const monthlyCardSpent = monthlyTransactions
+    .filter(t => t.type === 'USCITA' && t.method === 'CARTA')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const monthlyCategoryStats = categories.filter(c => !c.isIncome).map(cat => {
+    const amount = monthlyTransactions
+      .filter(t => t.type === 'USCITA' && t.category === cat.id)
+      .reduce((sum, t) => sum + t.amount, 0);
+    return {
+      ...cat,
+      amount
+    };
+  });
+
+  const firstDayOfMonth = new Date(year, month, 1).getDay(); // Day of week (0-6)
+  // Shift Sunday (0) to end of week for European visual calendar alignment (Monday-based)
+  const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const handlePrevMonth = () => {
+    setCurrentDate(new Date(year, month - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentDate(new Date(year, month + 1, 1));
+  };
 
   const monthNames = [
     'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
     'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
   ];
 
-  const firstDayOfMonth = new Date(year, month, 1).getDay();
-  // Adjust so Monday is 0, Sunday is 6
-  const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  const prevMonth = () => {
-    setCurrentDate(new Date(year, month - 1, 1));
-  };
-
-  const nextMonth = () => {
-    setCurrentDate(new Date(year, month + 1, 1));
-  };
-
-  // Copy code snippet helper
-  const handleCopyCode = (text: string) => {
-    navigator.clipboard.writeText(text);
+  // Helper to copy code inside explorer
+  const copyCodeToClipboard = (code: string) => {
+    navigator.clipboard.writeText(code);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  // Folder toggle helper for Java explorer
+  // File explorer toggle
   const toggleFolder = (path: string) => {
-    setExpandedFolders(prev => ({ ...prev, [path]: !prev[path] }));
+    setOpenFolders(prev => ({
+      ...prev,
+      [path]: !prev[path]
+    }));
   };
 
-  // Helper to resolve category badge styling
-  const getCategoryBadgeStyle = (catId: string) => {
-    const cat = categories.find(c => c.id === catId);
-    if (!cat) return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
+  // Render Directory Tree Node
+  const renderFolderNode = (folder: JavaFolder, currentPath: string = "backend") => {
+    const isFolderOpen = openFolders[currentPath];
+    const nodePath = currentPath;
 
-    switch (cat.color) {
-      case 'emerald': return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
-      case 'indigo': return 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20';
-      case 'purple': return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20';
-      case 'amber': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
-      case 'pink': return 'bg-pink-500/10 text-pink-600 dark:text-pink-400 border-pink-500/20';
-      case 'cyan': return 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20';
-      case 'teal': return 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20';
-      case 'orange': return 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20';
-      case 'rose': return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
-      default: return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
-    }
-  };
-
-  const getCategoryLabel = (catId: string) => {
-    const cat = categories.find(c => c.id === catId);
-    return cat ? cat.label : catId;
-  };
-
-  return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${isDarkMode ? 'bg-zinc-950 text-zinc-100' : 'bg-stone-50 text-stone-900'}`}>
-      
-      {/* GLOBAL NAVIGATION HEADER */}
-      <nav className={`px-4 py-3 border-b flex items-center justify-between sticky top-0 z-50 backdrop-blur-md ${isDarkMode ? 'bg-zinc-950/80 border-zinc-800/80' : 'bg-stone-50/80 border-stone-200/80'}`}>
-        <div className="flex items-center space-x-3">
-          <AppLogo />
-          <span className="font-mono text-sm tracking-tight font-semibold bg-gradient-to-r from-amber-500 via-rose-500 to-purple-500 bg-clip-text text-transparent">
-            Aura • Calendario & Finanza
-          </span>
+    return (
+      <div key={folder.name} className="ml-3 select-none">
+        <div 
+          onClick={() => toggleFolder(nodePath)}
+          className={`flex items-center gap-1.5 py-1 px-1.5 rounded-md cursor-pointer transition text-xs font-mono font-medium ${isDarkMode ? 'hover:bg-zinc-800 text-zinc-300' : 'hover:bg-stone-100 text-stone-700'}`}
+        >
+          {isFolderOpen ? (
+            <FolderOpen className="w-4 h-4 text-amber-500 shrink-0" />
+          ) : (
+            <Folder className="w-4 h-4 text-amber-500 shrink-0" />
+          )}
+          <span>{folder.name}</span>
         </div>
 
-        {/* Workspace Switcher */}
-        {isLoggedIn && (
-          <div className="flex rounded-lg p-0.5 bg-stone-200/60 dark:bg-zinc-900 border border-stone-300/50 dark:border-zinc-800 text-xs font-mono">
-            <button
-              onClick={() => setActiveTab('app')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${activeTab === 'app' ? (isDarkMode ? 'bg-zinc-800 text-amber-400 shadow-xs' : 'bg-white text-amber-600 shadow-xs') : 'text-stone-500 dark:text-zinc-400 hover:text-stone-900 dark:hover:text-zinc-100'}`}
-            >
-              <CalendarIcon className="w-3.5 h-3.5" />
-              <span>Applicazione</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('backend')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${activeTab === 'backend' ? (isDarkMode ? 'bg-zinc-800 text-cyan-400 shadow-xs' : 'bg-white text-cyan-600 shadow-xs') : 'text-stone-500 dark:text-zinc-400 hover:text-stone-900 dark:hover:text-zinc-100'}`}
-            >
-              <Code className="w-3.5 h-3.5" />
-              <span>Sviluppo Backend (Java)</span>
-            </button>
+        {isFolderOpen && (
+          <div className="border-l border-stone-200 dark:border-zinc-800 ml-2.5 pl-2">
+            {folder.folders?.map(f => renderFolderNode(f, `${nodePath}/${f.name}`))}
+            {folder.files?.map(file => (
+              <div
+                key={file.name}
+                onClick={() => setSelectedJavaFile(file)}
+                className={`flex items-center gap-1.5 py-1 px-1.5 rounded-md cursor-pointer transition text-xs font-mono mt-0.5 ${selectedJavaFile?.path === file.path ? (isDarkMode ? 'bg-amber-500/10 text-amber-400 font-semibold' : 'bg-amber-50 text-amber-800 font-semibold') : (isDarkMode ? 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900')}`}
+              >
+                <FileCode className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                <span className="truncate">{file.name}</span>
+              </div>
+            ))}
           </div>
         )}
+      </div>
+    );
+  };
+
+  const savedNoteForDay = dailyNotes.find(n => n.date === selectedDateStr);
+  const isNotesChanged = dayNotesContent !== (savedNoteForDay?.content || '') ||
+    JSON.stringify(dayEmotions) !== JSON.stringify(savedNoteForDay?.emotions || []);
+
+  return (
+    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${isDarkMode ? 'bg-[#0f0f11] text-zinc-100' : 'bg-[#F3F4F6] text-stone-800'}`}>
+      
+      {/* HEADER NAVBAR */}
+      <nav className={`h-16 border-b px-4 md:px-8 flex items-center justify-between shadow-xs z-20 transition-colors duration-300 ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'}`}>
+        <div className="flex items-center space-x-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden border border-amber-500/20 shadow-xs shrink-0">
+            <AppLogo />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-semibold tracking-tight text-sm md:text-base leading-none">Aura Calendario & Finanza</span>
+          </div>
+        </div>
 
         {isLoggedIn && (
           <div className="flex items-center space-x-2 md:space-x-4">
@@ -770,19 +936,25 @@ export function App() {
             {/* Theme selector */}
             <button 
               onClick={handleThemeToggle}
-              className={`p-2 rounded-lg border transition-all cursor-pointer ${isDarkMode ? 'border-zinc-800 bg-zinc-900 text-amber-400 hover:bg-zinc-800' : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-100'}`}
-              title="Cambia Tema"
+              className={`p-2 rounded-lg border transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-amber-400 hover:text-amber-300' : 'bg-stone-50 border-stone-200 text-stone-500 hover:text-stone-800'}`}
+              title={isDarkMode ? 'Modalità Chiara' : 'Modalità Scura'}
             >
-              {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {isDarkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </button>
 
             {/* Profile trigger */}
             <div 
-              onClick={() => setIsEditingProfile(true)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition ${isDarkMode ? 'border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800' : 'border-stone-200 bg-stone-100/60 hover:bg-stone-200/60'}`}
+              onClick={() => {
+                setActiveTab('app');
+                setIsEditingProfile(true);
+              }}
+              className="flex items-center gap-2 cursor-pointer group shrink-0"
+              title="Configura Profilo"
             >
-              <span className="text-base">{profile.avatarUrl}</span>
-              <span className="text-xs font-semibold">{profile.name}</span>
+              <UserAvatar avatar={profile.avatarUrl} className="w-8 h-8 text-base group-hover:scale-105 transition-transform" />
+              <span className="text-xs font-mono font-medium hidden sm:inline-block max-w-[100px] truncate">
+                {profile.name}
+              </span>
             </div>
 
             {/* Logout button */}
@@ -791,7 +963,7 @@ export function App() {
               className={`p-2 rounded-lg border transition-all cursor-pointer flex items-center justify-center text-rose-500 hover:bg-rose-500/10 ${isDarkMode ? 'border-zinc-800' : 'border-stone-200'}`}
               title="Disconnetti / Esci"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
@@ -801,12 +973,12 @@ export function App() {
       {!isLoggedIn ? (
         <div className="flex-1 flex items-center justify-center p-4">
           <motion.div 
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`w-full max-w-md p-6 rounded-2xl border shadow-xl ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}
+            className={`max-w-md w-full rounded-2xl border p-6 md:p-8 shadow-md transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'}`}
           >
-            <div className="text-center mb-6">
-              <div className="inline-block p-3 rounded-2xl bg-amber-500/10 mb-3">
+            <div className="text-center mb-5">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden mx-auto mb-3 border border-amber-500/20 shadow-md">
                 <AppLogo />
               </div>
               <h1 className="text-2.5xl font-semibold tracking-tight">Aura Calendario & Finanza</h1>
@@ -958,702 +1130,744 @@ export function App() {
             </div>
           </motion.div>
         </div>
-      ) : activeTab === 'app' ? (
-        
-        /* MAIN APPLICATION VIEW (CALENDAR & FINANCE DASHBOARD) */
-        <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
+      ) : (
+        <div className="flex-1 flex flex-col md:flex-row max-w-7xl w-full mx-auto p-3 md:p-6 gap-6 min-h-0">
           
-          {/* TOP OVERVIEW & BALANCE SUMMARY CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            
-            {/* Total Net Balance Card */}
-            <div className={`p-5 rounded-2xl border transition-all ${isDarkMode ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-stone-200 shadow-xs'}`}>
-              <div className="flex items-center justify-between text-xs font-mono text-stone-400 dark:text-zinc-400 mb-2">
-                <span>BILANCIO TOTALE NETTO</span>
-                <PiggyBank className="w-4 h-4 text-amber-500" />
-              </div>
-              <div className="text-2xl font-bold font-mono tracking-tight">
-                € {totalBalance.toFixed(2)}
-              </div>
-              <div className="mt-2 text-[11px] text-stone-500 dark:text-zinc-400 flex items-center gap-1 font-mono">
-                <span>Saldo complessivo aggiornato</span>
-              </div>
-            </div>
-
-            {/* Card Balance */}
-            <div className={`p-5 rounded-2xl border transition-all ${isDarkMode ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-stone-200 shadow-xs'}`}>
-              <div className="flex items-center justify-between text-xs font-mono text-stone-400 dark:text-zinc-400 mb-2">
-                <span>DISPONIBILITÀ CARTA</span>
-                <CreditCard className="w-4 h-4 text-indigo-500" />
-              </div>
-              <div className="text-2xl font-bold font-mono tracking-tight text-indigo-600 dark:text-indigo-400">
-                € {currentCardBalance.toFixed(2)}
-              </div>
-              <div className="mt-2 text-[11px] text-stone-500 dark:text-zinc-400 font-mono">
-                Partenza: € {initialCard.toFixed(2)}
-              </div>
-            </div>
-
-            {/* Cash Balance */}
-            <div className={`p-5 rounded-2xl border transition-all ${isDarkMode ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-stone-200 shadow-xs'}`}>
-              <div className="flex items-center justify-between text-xs font-mono text-stone-400 dark:text-zinc-400 mb-2">
-                <span>CONTANTI IN TASCA</span>
-                <DollarSign className="w-4 h-4 text-emerald-500" />
-              </div>
-              <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">
-                € {currentCashBalance.toFixed(2)}
-              </div>
-              <div className="mt-2 text-[11px] text-stone-500 dark:text-zinc-400 font-mono">
-                Partenza: € {initialCash.toFixed(2)}
-              </div>
-            </div>
-
-            {/* Monthly Inflow/Outflow summary */}
-            <div className={`p-5 rounded-2xl border transition-all ${isDarkMode ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-stone-200 shadow-xs'}`}>
-              <div className="flex items-center justify-between text-xs font-mono text-stone-400 dark:text-zinc-400 mb-2">
-                <span>MOVIMENTI REGISTRATI</span>
-                <Activity className="w-4 h-4 text-purple-500" />
-              </div>
-              <div className="space-y-1 font-mono text-xs">
-                <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400">
-                  <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Entrate:</span>
-                  <span className="font-bold">+€ {calculateTotalIncome().toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center text-rose-500">
-                  <span className="flex items-center gap-1"><TrendingDown className="w-3 h-3" /> Uscite:</span>
-                  <span className="font-bold">-€ {calculateTotalExpenses().toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* MAIN GRID: CALENDAR & DAY DETAILS */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            {/* LEFT 7 COLS: MONTHLY INTERACTIVE CALENDAR */}
-            <div className={`lg:col-span-7 p-5 rounded-2xl border flex flex-col justify-between ${isDarkMode ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-stone-200 shadow-xs'}`}>
+          {/* TAB 1: CALENDAR & FINANCE APPLICATION */}
+          {activeTab === 'app' && (
+            <div className="flex-1 flex flex-col lg:flex-row gap-6 min-w-0">
               
-              {/* Calendar Header */}
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold tracking-tight capitalize">
-                    {monthNames[month]} {year}
-                  </h2>
-                  <p className="text-xs text-stone-400 dark:text-zinc-400 mt-0.5">Seleziona un giorno per registrare spese o note private.</p>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <button 
-                    onClick={prevMonth}
-                    className={`p-2 rounded-lg border transition cursor-pointer ${isDarkMode ? 'border-zinc-800 hover:bg-zinc-800' : 'border-stone-200 hover:bg-stone-100'}`}
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button 
-                    onClick={() => { setCurrentDate(new Date()); setSelectedDate(new Date()); }}
-                    className={`px-3 py-1.5 rounded-lg border text-xs font-mono transition cursor-pointer ${isDarkMode ? 'border-zinc-800 hover:bg-zinc-800' : 'border-stone-200 hover:bg-stone-100'}`}
-                  >
-                    Oggi
-                  </button>
-                  <button 
-                    onClick={nextMonth}
-                    className={`p-2 rounded-lg border transition cursor-pointer ${isDarkMode ? 'border-zinc-800 hover:bg-zinc-800' : 'border-stone-200 hover:bg-stone-100'}`}
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Day of week headers */}
-              <div className="grid grid-cols-7 gap-1 text-center font-mono text-xs text-stone-400 dark:text-zinc-500 mb-2 font-semibold">
-                <span>Lun</span>
-                <span>Mar</span>
-                <span>Mer</span>
-                <span>Gio</span>
-                <span>Ven</span>
-                <span>Sab</span>
-                <span>Dom</span>
-              </div>
-
-              {/* Calendar Grid Cells */}
-              <div className="grid grid-cols-7 gap-1.5">
-                {/* Blank offset cells for month alignment */}
-                {Array.from({ length: adjustedFirstDay }).map((_, i) => (
-                  <div key={`blank-${i}`} className="h-20 md:h-24 rounded-xl border border-transparent opacity-20" />
-                ))}
-
-                {/* Days of month */}
-                {Array.from({ length: daysInMonth }).map((_, i) => {
-                  const dayNum = i + 1;
-                  const dateObj = new Date(year, month, dayNum);
-                  const dateStr = formatDateStr(dateObj);
-                  const isSelected = dateStr === selectedDateStr;
-                  const isToday = formatDateStr(new Date()) === dateStr;
-
-                  // Find daily note
-                  const dayNote = dailyNotes.find(n => n.date === dateStr);
-                  // Find day transactions
-                  const dayTxs = transactions.filter(t => t.date === dateStr);
-                  const dayExpenseSum = dayTxs.filter(t => t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
-                  const dayIncomeSum = dayTxs.filter(t => t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
-
-                  return (
-                    <div
-                      key={dayNum}
-                      onClick={() => setSelectedDate(dateObj)}
-                      className={`h-20 md:h-24 p-1.5 rounded-xl border flex flex-col justify-between transition-all cursor-pointer relative group ${
-                        isSelected 
-                          ? (isDarkMode ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30' : 'border-amber-500 bg-amber-50 ring-1 ring-amber-500/30') 
-                          : isToday
-                          ? (isDarkMode ? 'border-zinc-700 bg-zinc-800/40' : 'border-stone-300 bg-stone-100/60')
-                          : (isDarkMode ? 'border-zinc-800/80 bg-zinc-950/40 hover:border-zinc-700 hover:bg-zinc-900/40' : 'border-stone-200/80 bg-stone-50/50 hover:border-stone-300 hover:bg-white')
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className={`text-xs font-mono font-semibold ${isToday ? 'px-1.5 py-0.5 rounded-md bg-amber-500 text-black' : ''}`}>
-                          {dayNum}
-                        </span>
-                        {dayNote && dayNote.content && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Nota presente" />
-                        )}
-                      </div>
-
-                      {/* Daily Finance Badges in Cell */}
-                      <div className="space-y-0.5 font-mono text-[10px] overflow-hidden">
-                        {dayIncomeSum > 0 && (
-                          <div className="text-emerald-600 dark:text-emerald-400 truncate font-semibold">
-                            +€{dayIncomeSum.toFixed(0)}
-                          </div>
-                        )}
-                        {dayExpenseSum > 0 && (
-                          <div className="text-rose-500 truncate font-semibold">
-                            -€{dayExpenseSum.toFixed(0)}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Emotions indicator */}
-                      {dayNote && dayNote.emotions && dayNote.emotions.length > 0 && (
-                        <div className="flex items-center gap-0.5 text-[10px] overflow-hidden">
-                          {dayNote.emotions.map(e => {
-                            const found = EMOTIONS.find(em => em.label === e);
-                            return <span key={e}>{found?.icon || '•'}</span>;
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-            </div>
-
-            {/* RIGHT 5 COLS: SELECTED DAY MANAGEMENT */}
-            <div className="lg:col-span-5 space-y-6">
-              
-              {/* PANEL A: DAY DIARY & EMOTIONAL JOURNAL */}
-              <div className={`p-5 rounded-2xl border ${isDarkMode ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-stone-200 shadow-xs'}`}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center space-x-2">
-                    <BookOpen className="w-4 h-4 text-amber-500" />
-                    <h3 className="font-semibold text-sm">
-                      Diario del Giorno • <span className="font-mono text-amber-500">{selectedDateStr}</span>
-                    </h3>
-                  </div>
-                  <button 
-                    onClick={handleSaveNote}
-                    className="px-3 py-1 rounded-lg bg-black text-white dark:bg-zinc-100 dark:text-black font-semibold text-xs flex items-center gap-1.5 transition hover:opacity-90 cursor-pointer"
-                  >
-                    <Save className="w-3 h-3" /> Salva Note
-                  </button>
-                </div>
-
-                {/* Mood Badges Selector */}
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {EMOTIONS.map(e => {
-                    const isSelected = dayEmotions.includes(e.label);
-                    return (
-                      <button
-                        key={e.label}
-                        type="button"
-                        onClick={() => toggleEmotion(e.label)}
-                        className={`px-2.5 py-1 rounded-full text-xs font-mono flex items-center gap-1 border transition cursor-pointer ${
-                          isSelected
-                            ? 'border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold'
-                            : (isDarkMode ? 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700' : 'border-stone-200 bg-stone-100 text-stone-600 hover:bg-stone-200')
-                        }`}
-                      >
-                        <span>{e.icon}</span>
-                        <span>{e.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Daily Notes Textarea */}
-                <textarea
-                  rows={3}
-                  placeholder="Scrivi qui i tuoi pensieri, impegni o note personali della giornata..."
-                  value={dayNotesContent}
-                  onChange={(e) => setDayNotesContent(e.target.value)}
-                  className={`w-full rounded-xl p-3 text-xs transition focus:outline-none focus:ring-1 resize-none ${
-                    isDarkMode 
-                      ? 'bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-zinc-700 focus:ring-zinc-700' 
-                      : 'bg-stone-50 border-stone-200 text-stone-800 focus:border-stone-400 focus:ring-stone-400'
-                  }`}
-                />
-              </div>
-
-              {/* PANEL B: DAY TRANSACTIONS & ADD MOVIMENTO */}
-              <div className={`p-5 rounded-2xl border ${isDarkMode ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-stone-200 shadow-xs'}`}>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-2">
-                    <DollarSign className="w-4 h-4 text-emerald-500" />
-                    <h3 className="font-semibold text-sm">
-                      Movimenti di <span className="font-mono text-emerald-500">{selectedDateStr}</span>
-                    </h3>
-                  </div>
-                </div>
-
-                {/* FORM FOR ADDING TRANSACTION */}
-                <form onSubmit={handleAddTransaction} className="space-y-3 mb-5 p-3.5 rounded-xl border border-dashed border-stone-200 dark:border-zinc-800">
+              {/* LEFT COLUMN: Summary Cards + Interactive Calendar Grid */}
+              <div className="flex-1 flex flex-col gap-6 min-w-0">
+                
+                {/* Total Balance Overview Summary Bar */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   
-                  {/* Type Selector (Entrata / Uscita) */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setTxType('EXPENSE')}
-                      className={`py-1.5 rounded-lg text-xs font-mono font-semibold border transition cursor-pointer ${
-                        txType === 'EXPENSE'
-                          ? 'border-rose-500/50 bg-rose-500/10 text-rose-500'
-                          : (isDarkMode ? 'border-zinc-800 bg-zinc-950 text-zinc-400' : 'border-stone-200 bg-stone-100 text-stone-600')
-                      }`}
-                    >
-                      - Uscita / Spesa
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTxType('INCOME')}
-                      className={`py-1.5 rounded-lg text-xs font-mono font-semibold border transition cursor-pointer ${
-                        txType === 'INCOME'
-                          ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          : (isDarkMode ? 'border-zinc-800 bg-zinc-950 text-zinc-400' : 'border-stone-200 bg-stone-100 text-stone-600')
-                      }`}
-                    >
-                      + Entrata / Stipendio
-                    </button>
+                  {/* Balance Card */}
+                  <div className={`p-4 rounded-xl border shadow-xs transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                    <div className="flex items-center justify-between text-stone-400 dark:text-zinc-500 text-xs font-mono">
+                      <span>Saldo Totale</span>
+                      <PiggyBank className="w-3.5 h-3.5 text-amber-500" />
+                    </div>
+                    <p className={`text-xl font-bold font-mono mt-1 ${balance >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      {balance.toFixed(2)} €
+                    </p>
+                    <span className="text-[10px] text-gray-400 block mt-0.5">Entrate - Uscite</span>
                   </div>
 
-                  {/* Method & Amount */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[10px] font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1">Metodo</label>
-                      <select
-                        value={txMethod}
-                        onChange={(e) => setTxMethod(e.target.value as any)}
-                        className={`w-full rounded-lg px-2.5 py-1.5 text-xs transition focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
-                      >
-                        <option value="CARTA">💳 Carta</option>
-                        <option value="CONTANTI">💵 Contanti</option>
-                      </select>
+                  {/* On Card (Carta) */}
+                  <div className={`p-4 rounded-xl border shadow-xs transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                    <div className="flex items-center justify-between text-stone-400 dark:text-zinc-500 text-xs font-mono">
+                      <span>Su Carta</span>
+                      <CreditCard className="w-3.5 h-3.5 text-blue-500" />
                     </div>
-
-                    <div>
-                      <label className="block text-[10px] font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1">Importo (€)</label>
-                      <input 
-                        type="number"
-                        step="any"
-                        placeholder="0.00"
-                        required
-                        value={txAmount}
-                        onChange={(e) => setTxAmount(e.target.value)}
-                        className={`w-full rounded-lg px-2.5 py-1.5 text-xs font-mono transition focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
-                      />
-                    </div>
+                    <p className={`text-xl font-bold font-mono mt-1 ${balanceOnCard >= 0 ? (isDarkMode ? 'text-zinc-200' : 'text-stone-800') : 'text-rose-500'}`}>
+                      {balanceOnCard.toFixed(2)} €
+                    </p>
+                    <span className="text-[10px] text-gray-400 block mt-0.5">Conto Elettronico</span>
                   </div>
 
-                  {/* Category & Notes */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[10px] font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1">Categoria</label>
-                      <select
-                        value={txCategory}
-                        onChange={(e) => setTxCategory(e.target.value)}
-                        className={`w-full rounded-lg px-2.5 py-1.5 text-xs transition focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
-                      >
-                        {txType === 'INCOME' ? (
-                          <option value="STIPENDIO">Stipendio / Entrate</option>
-                        ) : (
-                          categories.filter(c => !c.isIncome).map(c => (
-                            <option key={c.id} value={c.id}>{c.label}</option>
-                          ))
-                        )}
-                      </select>
+                  {/* In Cash (Contante) */}
+                  <div className={`p-4 rounded-xl border shadow-xs transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                    <div className="flex items-center justify-between text-stone-400 dark:text-zinc-500 text-xs font-mono">
+                      <span>In Contanti</span>
+                      <Briefcase className="w-3.5 h-3.5 text-purple-500" />
+                    </div>
+                    <p className={`text-xl font-bold font-mono mt-1 ${balanceInCash >= 0 ? (isDarkMode ? 'text-zinc-200' : 'text-stone-800') : 'text-rose-500'}`}>
+                      {balanceInCash.toFixed(2)} €
+                    </p>
+                    <span className="text-[10px] text-gray-400 block mt-0.5">Banconote reali</span>
+                  </div>
+
+                  {/* Summary Ratio Card */}
+                  <div className={`p-4 rounded-xl border shadow-xs transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                    <div className="flex items-center justify-between text-stone-400 dark:text-zinc-500 text-xs font-mono">
+                      <span>Spese Totali</span>
+                      <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
+                    </div>
+                    <p className="text-xl font-bold font-mono mt-1 text-rose-500">
+                      -{totalExpenses.toFixed(2)} €
+                    </p>
+                    <span className="text-[10px] text-gray-400 block mt-0.5">Risparmio: {totalIncome > 0 ? (((totalIncome - totalExpenses)/totalIncome)*100).toFixed(0) : '0'}%</span>
+                  </div>
+
+                </div>
+
+                {/* CALENDAR MONTH CONTAINER */}
+                <div className={`rounded-xl border shadow-xs p-5 transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                  
+                  {/* Calendar Header Controls */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <CalendarIcon className="w-4 h-4 text-amber-500" />
+                      <h2 className="text-base font-semibold tracking-tight font-mono uppercase">
+                        {monthNames[month]} {year}
+                      </h2>
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1">Note (Opzionale)</label>
-                      <input 
-                        type="text"
-                        placeholder="Es. Pranzo, Benzina..."
-                        value={txNotes}
-                        onChange={(e) => setTxNotes(e.target.value)}
-                        className={`w-full rounded-lg px-2.5 py-1.5 text-xs transition focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
-                      />
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={handlePrevMonth}
+                        className={`p-1.5 rounded-lg border transition cursor-pointer ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700' : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'}`}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={handleNextMonth}
+                        className={`p-1.5 rounded-lg border transition cursor-pointer ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700' : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'}`}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    className="w-full py-2 rounded-lg bg-black text-white dark:bg-zinc-100 dark:text-black font-semibold text-xs flex items-center justify-center gap-1 transition hover:opacity-90 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Registra Movimento
-                  </button>
-                </form>
+                  {/* Calendar Grid Weekdays */}
+                  <div className="grid grid-cols-7 gap-1 text-center border-b border-stone-150 dark:border-zinc-800 pb-2 mb-2 text-xs font-mono text-stone-400 dark:text-zinc-500 font-semibold">
+                    <span>LUN</span>
+                    <span>MAR</span>
+                    <span>MER</span>
+                    <span>GIO</span>
+                    <span>VEN</span>
+                    <span>SAB</span>
+                    <span>DOM</span>
+                  </div>
 
-                {/* LIST OF TRANSACTIONS FOR SELECTED DAY */}
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {selectedDayTransactions.length === 0 ? (
-                    <div className="text-center py-6 text-xs text-stone-400 dark:text-zinc-500 font-mono">
-                      Nessun movimento registrato per questa data.
+                  {/* Calendar Days Matrix */}
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {/* Empty elements before start of month */}
+                    {Array.from({ length: adjustedFirstDay }).map((_, i) => (
+                      <div key={`empty-${i}`} className="aspect-square bg-stone-50/50 dark:bg-zinc-950/20 rounded-lg border border-dashed border-transparent" />
+                    ))}
+
+                    {/* Month Days */}
+                    {Array.from({ length: daysInMonth }).map((_, i) => {
+                      const dayNumber = i + 1;
+                      const dateStr = formatDateString(year, month, dayNumber);
+                      const isSelected = selectedDateStr === dateStr;
+
+                      // Calculate sums for this day
+                      const dayTxs = transactions.filter(t => t.date === dateStr);
+                      const dayIncome = dayTxs.filter(t => t.type === 'ENTRATA').reduce((acc, t) => acc + t.amount, 0);
+                      const dayExpense = dayTxs.filter(t => t.type === 'USCITA').reduce((acc, t) => acc + t.amount, 0);
+                      const dayNote = dailyNotes.find(n => n.date === dateStr);
+                      const dayHasNote = dayNote && dayNote.content.trim() !== '';
+                      const dayEmotionsList = dayNote && dayNote.emotions ? dayNote.emotions : [];
+
+                      return (
+                        <div
+                          key={`day-${dayNumber}`}
+                          onClick={() => setSelectedDateStr(dateStr)}
+                          className={`aspect-square p-1.5 rounded-xl border flex flex-col justify-between cursor-pointer relative transition-all group ${isSelected ? (isDarkMode ? 'bg-zinc-100 border-zinc-100 text-black shadow-md font-bold' : 'bg-black border-black text-white shadow-md font-bold') : (isDarkMode ? 'bg-zinc-950 border-zinc-800 hover:border-zinc-700 text-zinc-300' : 'bg-stone-50 border-stone-150 hover:bg-white hover:border-stone-300 text-stone-800')}`}
+                        >
+                          {/* Day number & emotions */}
+                          <div className="flex items-center justify-between w-full">
+                            <span className="text-xs font-mono">{dayNumber}</span>
+                            {dayEmotionsList.length > 0 && (
+                              <span className="text-xs leading-none shrink-0" title={dayEmotionsList.map(id => EMOTIONS.find(e => e.id === id)?.label).join(', ')}>
+                                {dayEmotionsList.slice(0, 2).map(id => EMOTIONS.find(e => e.id === id)?.emoji).join('')}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Indicators for note or money */}
+                          <div className="flex flex-col gap-0.5 w-full mt-1">
+                            {dayIncome > 0 && (
+                              <span className={`text-[9px] font-mono leading-none font-semibold text-emerald-500 truncate ${isSelected ? 'text-emerald-700' : ''}`}>
+                                +{dayIncome}€
+                              </span>
+                            )}
+                            {dayExpense > 0 && (
+                              <span className={`text-[9px] font-mono leading-none font-semibold text-rose-500 truncate ${isSelected ? 'text-rose-700' : ''}`}>
+                                -{dayExpense}€
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Blue small indicator dot for diary note */}
+                          {dayHasNote && (
+                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Calendar Footer Info */}
+                  <div className="mt-4 pt-3 border-t border-stone-150 dark:border-zinc-800 flex items-center justify-between text-[11px] text-gray-400 font-mono">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-blue-500" /> Nota Diario Scritta
+                    </span>
+                    <span>Seleziona un giorno per pianificare entrate, uscite e scrivere appunti.</span>
+                  </div>
+
+                </div>
+
+                {/* CONSUNTIVO E STIMA FINE MESE */}
+                <div className={`rounded-xl border shadow-xs p-5 transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-stone-150 dark:border-zinc-800">
+                    <h3 className="text-sm font-semibold tracking-tight font-mono uppercase flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-amber-500" /> CONSUNTIVO FINE MESE ({monthNames[month].toUpperCase()})
+                    </h3>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold">
+                      {year}
+                    </span>
+                  </div>
+
+                  {/* Primary Totals Grid */}
+                  <div className="grid grid-cols-3 gap-2 mb-5 text-center">
+                    <div className="p-2 rounded-lg bg-red-500/5 border border-red-500/10 flex flex-col justify-between">
+                      <span className="text-[9px] font-mono text-stone-400 dark:text-zinc-500 uppercase font-bold leading-tight">TOTALE SPESO</span>
+                      <span className="text-xs font-bold font-mono text-red-500 block mt-1">
+                        {monthlyTotalSpent.toFixed(2)} €
+                      </span>
                     </div>
-                  ) : (
-                    selectedDayTransactions.map(t => (
-                      <div 
-                        key={t.id}
-                        className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition ${isDarkMode ? 'bg-zinc-950/60 border-zinc-800' : 'bg-stone-50 border-stone-200'}`}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono border ${getCategoryBadgeStyle(t.category)}`}>
-                            {getCategoryLabel(t.category)}
-                          </span>
-                          <div>
-                            <div className="font-semibold flex items-center gap-1">
-                              <span>{t.method === 'CARTA' ? '💳 Carta' : '💵 Contanti'}</span>
-                              {t.notes && <span className="text-stone-400 dark:text-zinc-500 font-normal">({t.notes})</span>}
-                            </div>
+                    <div className="p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10 flex flex-col justify-between">
+                      <span className="text-[9px] font-mono text-stone-400 dark:text-zinc-500 uppercase font-bold leading-tight">IN CONTANTI</span>
+                      <span className="text-xs font-bold font-mono text-emerald-500 block mt-1">
+                        {monthlyCashSpent.toFixed(2)} €
+                      </span>
+                    </div>
+                    <div className="p-2 rounded-lg bg-blue-500/5 border border-blue-500/10 flex flex-col justify-between">
+                      <span className="text-[9px] font-mono text-stone-400 dark:text-zinc-500 uppercase font-bold leading-tight">SU CARTA</span>
+                      <span className="text-xs font-bold font-mono text-blue-500 block mt-1">
+                        {monthlyCardSpent.toFixed(2)} €
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Category Breakdown */}
+                  <span className="block text-[10px] font-mono text-stone-400 dark:text-zinc-500 uppercase font-bold tracking-wider mb-3">
+                    📈 DETTAGLIO PER CATEGORIA:
+                  </span>
+                  <div className="space-y-2.5">
+                    {monthlyCategoryStats.map(cat => {
+                      const percentage = monthlyTotalSpent > 0 ? (cat.amount / monthlyTotalSpent) * 100 : 0;
+
+                      return (
+                        <div key={cat.id} className="text-xs">
+                          <div className="flex justify-between items-center mb-1 font-mono">
+                            <span className="font-semibold text-stone-600 dark:text-zinc-300 flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full ${cat.color}`} />
+                              {cat.label}
+                            </span>
+                            <span className="text-stone-900 dark:text-white font-bold">
+                              {cat.amount.toFixed(2)} € <span className="text-[10px] text-stone-400 dark:text-zinc-500 font-normal">({percentage.toFixed(0)}%)</span>
+                            </span>
+                          </div>
+                          <div className="w-full bg-stone-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${cat.color}`}
+                              style={{ width: `${percentage}%` }}
+                            />
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                        <div className="flex items-center space-x-2">
-                          <span className={`font-mono font-bold ${t.type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                            {t.type === 'INCOME' ? '+' : '-'}€{t.amount.toFixed(2)}
+                {/* DYNAMIC CATEGORIES MANAGER */}
+                <div className={`rounded-xl border shadow-xs p-5 transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-stone-150 dark:border-zinc-800">
+                    <h3 className="text-sm font-semibold tracking-tight font-mono uppercase flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-amber-500" /> 🛠️ Gestione Categorie
+                    </h3>
+                  </div>
+
+                  <p className="text-[11px] text-stone-500 dark:text-zinc-400 font-mono mb-3 leading-relaxed">
+                    Personalizza l'elenco delle tue categorie per entrate e uscite. Si rifletterà istantaneamente nei moduli di inserimento e nei report.
+                  </p>
+
+                  {/* Category Pill List */}
+                  <div className="flex flex-wrap gap-1.5 mb-4 max-h-36 overflow-y-auto pr-1">
+                    {categories.map(cat => {
+                      const isStipendio = cat.id === 'STIPENDIO';
+                      return (
+                        <div 
+                          key={cat.id} 
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-mono transition-colors ${
+                            isDarkMode 
+                              ? 'bg-zinc-950 border-zinc-800 text-zinc-300' 
+                              : 'bg-stone-50 border-stone-200 text-stone-700'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${cat.color}`} />
+                          <span className="font-medium">{cat.label}</span>
+                          <span className="text-[9px] opacity-60 font-sans">
+                            ({cat.isIncome ? 'Entrata' : 'Uscita'})
                           </span>
-                          <button
-                            onClick={() => handleDeleteTransaction(t.id)}
-                            className="p-1 rounded-md text-stone-400 hover:text-rose-500 transition cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {!isStipendio && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCategory(cat.id)}
+                              className="ml-1 text-stone-400 hover:text-red-500 hover:bg-red-500/10 p-0.5 rounded transition cursor-pointer"
+                              title={`Elimina "${cat.label}"`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Create New Category Inline Form */}
+                  <form onSubmit={handleAddCategory} className="space-y-3 pt-3 border-t border-dashed border-stone-150 dark:border-zinc-800">
+                    <span className="block text-[10px] font-mono text-stone-400 dark:text-zinc-500 uppercase font-bold tracking-wider">
+                      Nuova Categoria Personalizzata:
+                    </span>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                      <div>
+                        <label className="block text-[10px] text-gray-400 mb-1">Nome</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="es. Libri, Cane..."
+                          value={newCatLabel}
+                          onChange={(e) => setNewCatLabel(e.target.value)}
+                          className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
+                        />
                       </div>
-                    ))
-                  )}
+                      <div>
+                        <label className="block text-[10px] text-gray-400 mb-1">Tipo</label>
+                        <select
+                          value={newCatType}
+                          onChange={(e) => setNewCatType(e.target.value as 'ENTRATA' | 'USCITA')}
+                          className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
+                        >
+                          <option value="USCITA">Uscita (Spesa)</option>
+                          <option value="ENTRATA">Entrata (Guadagno)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Beautiful circle color options selector */}
+                    <div>
+                      <label className="block text-[10px] text-gray-400 mb-1.5 font-mono">Colore Icona</label>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          'bg-red-500', 'bg-emerald-500', 'bg-blue-500', 
+                          'bg-amber-500', 'bg-purple-500', 'bg-pink-500', 
+                          'bg-cyan-500', 'bg-teal-500', 'bg-indigo-500', 
+                          'bg-orange-500', 'bg-gray-500', 'bg-zinc-800'
+                        ].map(col => (
+                          <button
+                            key={col}
+                            type="button"
+                            onClick={() => setNewCatColor(col)}
+                            className={`w-5 h-5 rounded-full ${col} transition-transform relative cursor-pointer hover:scale-110 flex items-center justify-center`}
+                            title={col.replace('bg-', '')}
+                          >
+                            {newCatColor === col && (
+                              <Check className="w-3 h-3 text-white drop-shadow-xs font-bold" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-2 rounded-lg bg-black text-white dark:bg-zinc-100 dark:text-black font-semibold transition hover:opacity-90 cursor-pointer text-center text-xs flex items-center justify-center gap-1 font-mono"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Salva Categoria
+                    </button>
+                  </form>
                 </div>
 
               </div>
 
-              {/* PANEL C: CUSTOM CATEGORIES MANAGEMENT */}
-              <div className={`p-5 rounded-2xl border ${isDarkMode ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-stone-200 shadow-xs'}`}>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-sm">Gestione Categorie Personali</h3>
-                </div>
-
-                {/* Add Category Form */}
-                <form onSubmit={handleAddCategory} className="flex gap-2 mb-3">
-                  <input 
-                    type="text"
-                    placeholder="Nuova categoria (es. Abbigliamento)"
-                    value={newCatLabel}
-                    onChange={(e) => setNewCatLabel(e.target.value)}
-                    className={`flex-1 rounded-lg px-2.5 py-1.5 text-xs transition focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
-                  />
-                  <select
-                    value={newCatColor}
-                    onChange={(e) => setNewCatColor(e.target.value)}
-                    className={`rounded-lg px-2 py-1.5 text-xs transition focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
+              {/* RIGHT COLUMN: Day Planner Drawer (Diary + Finance Transactions Manager) */}
+              <div className="w-full lg:w-96 flex flex-col gap-6 shrink-0">
+                
+                {/* Profile Editor Modal Overlay Trigger inside app */}
+                {isEditingProfile ? (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className={`rounded-xl border p-5 shadow-xs transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}
                   >
-                    {CATEGORY_COLOR_PRESETS.map(c => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="submit"
-                    className="px-3 py-1.5 rounded-lg bg-black text-white dark:bg-zinc-100 dark:text-black font-semibold text-xs flex items-center gap-1 transition hover:opacity-90 cursor-pointer"
-                  >
-                    <Plus className="w-3 h-3" /> Aggiungi
-                  </button>
-                </form>
+                    <div className="flex justify-between items-center pb-3 border-b border-stone-150 dark:border-zinc-800 mb-4">
+                      <h3 className="text-sm font-mono font-bold uppercase">Profilo di {profile.name}</h3>
+                      <button onClick={() => setIsEditingProfile(false)} className="text-xs text-stone-400 hover:text-black dark:hover:text-white">Chiudi</button>
+                    </div>
 
-                {/* Active Category Badges */}
-                <div className="flex flex-wrap gap-1.5">
-                  {categories.map(c => (
-                    <span 
-                      key={c.id}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-mono border flex items-center gap-1.5 ${getCategoryBadgeStyle(c.id)}`}
-                    >
-                      <span>{c.label}</span>
-                      {c.id !== 'STIPENDIO' && (
-                        <button 
-                          onClick={() => handleDeleteCategory(c.id)}
-                          className="hover:text-rose-500 transition cursor-pointer"
-                          title="Elimina Categoria"
+                    <form onSubmit={handleSaveProfile} className="space-y-4 text-xs font-mono">
+                      <div>
+                        <label className="block text-gray-400 uppercase mb-1">Nome Utente</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={tempName}
+                          onChange={(e) => setTempName(e.target.value)}
+                          className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-400 uppercase mb-1">Password</label>
+                        <input 
+                          type="password" 
+                          required
+                          value={tempPassword}
+                          onChange={(e) => setTempPassword(e.target.value)}
+                          className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
+                        />
+                      </div>
+
+                      <AvatarSelector 
+                        selectedUrl={tempAvatarUrl} 
+                        onSelect={(url) => setTempAvatarUrl(url)} 
+                        isDarkMode={isDarkMode} 
+                      />
+
+                      <div className="grid grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="block text-gray-400 uppercase mb-1">💳 Partenza Carta (€)</label>
+                          <input 
+                            type="number" 
+                            step="any"
+                            value={tempInitialCard}
+                            onChange={(e) => setTempInitialCard(e.target.value)}
+                            className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-gray-400 uppercase mb-1">💵 Partenza Contanti (€)</label>
+                          <input 
+                            type="number" 
+                            step="any"
+                            value={tempInitialCash}
+                            onChange={(e) => setTempInitialCash(e.target.value)}
+                            className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2 rounded-lg bg-emerald-600 text-white font-bold transition hover:opacity-90 cursor-pointer text-center flex items-center justify-center gap-1.5"
+                      >
+                        <Save className="w-3.5 h-3.5" /> Salva Profilo
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full py-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-500 font-semibold transition hover:bg-rose-500/20 cursor-pointer text-center flex items-center justify-center gap-1.5"
+                      >
+                        <LogOut className="w-3.5 h-3.5" /> Esci / Disconnetti
+                      </button>
+                    </form>
+                  </motion.div>
+                ) : null}
+
+                {/* SELECTED DAY PANEL */}
+                <div className={`rounded-xl border shadow-xs p-5 flex flex-col transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                  
+                  {/* Selected Date Header Banner */}
+                  <div className="flex items-center justify-between pb-3 border-b border-stone-150 dark:border-zinc-800 mb-4">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-mono text-amber-500 uppercase font-bold tracking-wider">PIANIFICAZIONE GIORNALIERA</span>
+                      <span className="text-sm font-bold font-mono text-stone-900 dark:text-white mt-0.5">
+                        {selectedDateStr}
+                      </span>
+                    </div>
+                    <span className="text-xs font-mono bg-stone-100 dark:bg-zinc-800 text-stone-500 px-2 py-0.5 rounded-full">
+                      {transactions.filter(t => t.date === selectedDateStr).length} Transazioni
+                    </span>
+                  </div>
+
+                  {/* 1. JOURNAL DIARY NOTES & EMOTIONS FOR THE DAY */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 font-mono">
+                        ✍️ Note Personali & Emozioni
+                      </label>
+                      {isNotesChanged && (
+                        <button
+                          onClick={handleSaveNote}
+                          className="text-[10px] bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded font-mono font-medium flex items-center gap-1 cursor-pointer shadow-xs"
                         >
-                          ×
+                          <Save className="w-3 h-3" /> Salva Modifiche
                         </button>
                       )}
+                    </div>
+
+                    {/* Selectable Emotions Section */}
+                    <div className="mb-3">
+                      <span className="block text-[10px] text-gray-400 uppercase font-mono mb-1.5 font-bold">EMOZIONI DEL GIORNO:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {EMOTIONS.map(emotion => {
+                          const isSelected = dayEmotions.includes(emotion.id);
+                           return (
+                             <button
+                               key={emotion.id}
+                               type="button"
+                               onClick={() => handleToggleEmotion(emotion.id)}
+                               className={`px-2 py-1 rounded-lg border text-xs font-mono transition-all cursor-pointer flex items-center gap-1 ${
+                                 isSelected
+                                   ? 'bg-blue-500/10 text-blue-500 border-blue-500/40 font-bold scale-[1.02]'
+                                   : isDarkMode
+                                     ? 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                                     : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100 hover:text-stone-900'
+                               }`}
+                               title={emotion.label}
+                             >
+                               <span>{emotion.emoji}</span>
+                               <span className="text-[10px]">{emotion.label}</span>
+                             </button>
+                           );
+                         })}
+                       </div>
+                     </div>
+
+                    <textarea
+                      value={dayNotesContent}
+                      onChange={(e) => setDayNotesContent(e.target.value)}
+                      placeholder="Scrivi qui i tuoi pensieri personali o note sulla giornata..."
+                      rows={3}
+                      className={`w-full rounded-lg p-3 text-xs transition focus:outline-none focus:ring-1 ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-200 focus:border-zinc-700 focus:ring-zinc-700' : 'bg-stone-50 border-stone-200 text-stone-800 focus:border-stone-400 focus:ring-stone-400'}`}
+                    />
+                  </div>
+
+                  {/* 2. TRANSACTIONS LIST FOR TODAY */}
+                  <div className="mb-6">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 font-mono mb-2">
+                      💸 Entrate & Uscite del Giorno
+                    </label>
+
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                      {transactions.filter(t => t.date === selectedDateStr).length === 0 ? (
+                        <div className="p-3 text-center text-xs font-mono text-gray-400 dark:text-zinc-500 bg-stone-50 dark:bg-zinc-950/40 rounded-lg border border-dashed border-stone-200 dark:border-zinc-800">
+                          Nessun movimento registrato.
+                        </div>
+                      ) : (
+                        transactions.filter(t => t.date === selectedDateStr).map(tx => {
+                          const catInfo = categories.find(c => c.id === tx.category);
+                          return (
+                            <div 
+                              key={tx.id} 
+                              className={`p-2.5 rounded-lg border flex items-center justify-between text-xs font-mono transition-colors ${isDarkMode ? 'bg-zinc-950 border-zinc-800 hover:bg-zinc-900' : 'bg-white border-stone-150 hover:bg-stone-50'}`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={`w-1.5 h-7 rounded-full shrink-0 ${tx.type === 'ENTRATA' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-semibold text-stone-900 dark:text-white truncate">
+                                      {tx.notes || catInfo?.label}
+                                    </span>
+                                    <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-sans border shrink-0 ${tx.method === 'CARTA' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
+                                      {tx.method === 'CARTA' ? '💳 CARTA' : '💵 CONTANTI'}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-gray-400 block truncate">{catInfo?.label}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0 ml-2">
+                                <span className={`font-bold ${tx.type === 'ENTRATA' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                  {tx.type === 'ENTRATA' ? '+' : '-'}{tx.amount.toFixed(2)} €
+                                </span>
+                                <button 
+                                  onClick={() => handleDeleteTransaction(tx.id)}
+                                  className="p-1 rounded text-stone-400 hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
+                                  title="Rimuovi"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 3. ADD TRANSACTION QUICK FORM */}
+                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-zinc-950 border-zinc-800' : 'bg-stone-50 border-stone-150'}`}>
+                    <span className="block text-xs font-mono font-bold uppercase mb-3 text-stone-500 dark:text-zinc-400">
+                      ➕ Aggiungi Movimento
                     </span>
-                  ))}
+
+                    <form onSubmit={handleAddTransaction} className="space-y-3.5 text-xs font-mono">
+                      
+                      {/* Amount and Type Switch */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-gray-400 mb-1">Importo (€)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            placeholder="0.00"
+                            value={txAmount}
+                            onChange={(e) => setTxAmount(e.target.value)}
+                            className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-stone-200 text-stone-800'}`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-gray-400 mb-1">Tipo</label>
+                          <select
+                            value={txType}
+                            onChange={(e) => setTxType(e.target.value as 'ENTRATA' | 'USCITA')}
+                            className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-stone-200 text-stone-800'}`}
+                          >
+                            <option value="USCITA">Uscita (Spesa)</option>
+                            <option value="ENTRATA">Entrata (Guadagno)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Payment Method and Category */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-gray-400 mb-1">Metodo</label>
+                          <select
+                            value={txMethod}
+                            onChange={(e) => setTxMethod(e.target.value as 'CARTA' | 'CONTANTI')}
+                            className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-stone-200 text-stone-800'}`}
+                          >
+                            <option value="CARTA">💳 Carta</option>
+                            <option value="CONTANTI">💵 Contanti</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-gray-400 mb-1">Categoria</label>
+                          <select
+                            value={txCategory}
+                            onChange={(e) => setTxCategory(e.target.value)}
+                            disabled={txType === 'ENTRATA'}
+                            className={`w-full p-2 rounded-lg border text-xs focus:outline-none disabled:opacity-50 ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-stone-200 text-stone-800'}`}
+                          >
+                            {categories.filter(c => !c.isIncome).map(c => (
+                              <option key={c.id} value={c.id}>{c.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Notes description */}
+                      <div>
+                        <label className="block text-[10px] text-gray-400 mb-1">Note / Causale</label>
+                        <input
+                          type="text"
+                          placeholder="es. Benzina Eni, Spesa Lidl..."
+                          value={txNotes}
+                          onChange={(e) => setTxNotes(e.target.value)}
+                          className={`w-full p-2 rounded-lg border text-xs focus:outline-none ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-stone-200 text-stone-800'}`}
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2 rounded-lg bg-black text-white dark:bg-zinc-100 dark:text-black font-semibold transition hover:opacity-90 cursor-pointer text-center flex items-center justify-center gap-1"
+                      >
+                        <Plus className="w-4 h-4" /> Registra Movimento
+                      </button>
+
+                    </form>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 2: SPRING BOOT CODE EXPLORER & PROJECT STRUCT */}
+          {activeTab === 'backend' && (
+            <div className="flex-1 flex flex-col md:flex-row gap-6 min-w-0">
+              
+              {/* FILE EXPLORER SIDEBAR */}
+              <div className={`w-full md:w-72 rounded-xl border p-4 flex flex-col shrink-0 transition-colors ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                <div className="pb-3 border-b border-stone-150 dark:border-zinc-800 mb-4">
+                  <span className="text-[10px] font-mono text-amber-500 uppercase font-bold tracking-wider block">PROGETTO BACKEND</span>
+                  <span className="text-xs text-stone-500 dark:text-zinc-400 font-mono block mt-0.5">Struttura per STS / VSCode</span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto pr-1">
+                  {renderFolderNode(javaProjectStructure)}
+                </div>
+
+                <div className="pt-3 border-t border-stone-150 dark:border-zinc-800 text-[10px] font-mono text-stone-400 dark:text-zinc-500 leading-normal space-y-1">
+                  <p>💡 <strong>Note per Lavinia:</strong></p>
+                  <p>Questa è la struttura classica a pacchetti standard raccomandata a livello enterprise per progetti Spring Boot in Java 21.</p>
                 </div>
               </div>
 
-            </div>
+              {/* CODE DISPLAY WINDOW */}
+              <div className="flex-1 flex flex-col min-w-0">
+                {selectedJavaFile ? (
+                  <div className={`flex-1 flex flex-col rounded-xl border overflow-hidden shadow-xs transition-colors ${isDarkMode ? 'bg-zinc-950 border-zinc-850' : 'bg-[#1e1e1e] border-stone-900'}`}>
+                    
+                    {/* Top bar */}
+                    <div className="h-11 bg-[#181818] border-b border-[#252525] px-4 flex items-center justify-between text-xs font-mono shrink-0">
+                      <div className="flex items-center gap-2 text-zinc-400 truncate">
+                        <FileCode className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span className="font-semibold text-zinc-200 truncate">{selectedJavaFile.name}</span>
+                        <span className="text-[10px] text-zinc-600 hidden sm:inline">{selectedJavaFile.path}</span>
+                      </div>
 
-          </div>
+                      <button
+                        onClick={() => copyCodeToClipboard(selectedJavaFile.code)}
+                        className="px-2.5 py-1 rounded bg-[#2a2a2a] hover:bg-[#353535] text-zinc-300 hover:text-white transition cursor-pointer flex items-center gap-1.5 shrink-0"
+                      >
+                        {copiedCode ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Copiato!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copia Codice</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
 
-        </main>
+                    {/* Pre Code Viewer */}
+                    <div className="flex-1 overflow-auto p-4 md:p-6 text-xs md:text-sm font-mono text-zinc-200 leading-relaxed selection:bg-zinc-800 selection:text-white">
+                      <pre className="whitespace-pre">
+                        <code>{selectedJavaFile.code}</code>
+                      </pre>
+                    </div>
 
-      ) : (
+                    {/* Highlighted Java 21 Tip Panel at the bottom */}
+                    <div className="bg-[#141414] border-t border-[#252525] p-3.5 text-xs text-zinc-400 font-mono flex items-start gap-2.5 shrink-0">
+                      <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-500 rounded text-[10px] font-bold tracking-wider shrink-0 mt-0.5">Java 21</span>
+                      <p className="leading-normal text-[11px]">
+                        {selectedJavaFile.name.endsWith('Dto.java') 
+                          ? "Utilizziamo i Record introdotti stabilmente per dichiarare DTO compatti, immutabili e thread-safe senza Boilerplate code."
+                          : selectedJavaFile.name.includes('Service') 
+                          ? "Usa le Sequenced Collections di Java 21 (es. .toList() diretto) per una gestione più chiara degli ordini di inserimento."
+                          : "Compatibile al 100% con Spring Boot 3.x, Hibernate 6.x e la specifica Jakarta Persistence (JPA)."}
+                      </p>
+                    </div>
 
-        /* BACKEND JAVA DEVELOPER EXPLORER VIEW */
-        <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col lg:flex-row gap-6">
-          
-          {/* LEFT: JAVA PROJECT DIRECTORY TREE */}
-          <div className={`w-full lg:w-80 p-4 rounded-2xl border flex flex-col ${isDarkMode ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-stone-200 shadow-xs'}`}>
-            <div className="flex items-center justify-between pb-3 mb-3 border-b border-stone-200 dark:border-zinc-800 font-mono text-xs">
-              <span className="font-semibold text-cyan-500 flex items-center gap-1.5">
-                <FolderOpen className="w-4 h-4" /> Aura Backend Architecture
-              </span>
-              <span className="text-[10px] text-stone-400 dark:text-zinc-500">Java 21 / Spring</span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto font-mono text-xs space-y-1">
-              <TreeRenderer 
-                items={javaProjectStructure} 
-                selectedFile={selectedJavaFile} 
-                onSelectFile={setSelectedJavaFile}
-                expandedFolders={expandedFolders}
-                onToggleFolder={toggleFolder}
-              />
-            </div>
-          </div>
-
-          {/* RIGHT: CODE VIEWER & ARCHITECTURE EXPLANATION */}
-          <div className={`flex-1 p-5 rounded-2xl border flex flex-col justify-between ${isDarkMode ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-stone-200 shadow-xs'}`}>
-            <div>
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-stone-200 dark:border-zinc-800">
-                <div className="flex items-center space-x-2">
-                  <FileCode className="w-4 h-4 text-cyan-500" />
-                  <span className="font-mono text-xs font-bold text-cyan-600 dark:text-cyan-400">
-                    {selectedJavaFile.name}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => handleCopyCode(selectedJavaFile.content)}
-                  className={`px-2.5 py-1 rounded-lg border text-xs font-mono flex items-center gap-1 transition cursor-pointer ${isDarkMode ? 'border-zinc-800 hover:bg-zinc-800' : 'border-stone-200 hover:bg-stone-100'}`}
-                >
-                  {copiedCode ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedCode ? 'Copiato!' : 'Copia Codice'}</span>
-                </button>
+                  </div>
+                ) : (
+                  <div className="flex-1 rounded-xl border border-dashed border-stone-300 dark:border-zinc-800 flex flex-col items-center justify-center p-8 text-center text-gray-400">
+                    <Terminal className="w-10 h-10 text-stone-300 mb-2" />
+                    <p className="text-sm font-mono">Seleziona un file Java a sinistra per aprirlo ed esaminarne il codice sorgente ordinato.</p>
+                  </div>
+                )}
               </div>
 
-              {/* Code Display */}
-              <div className={`p-4 rounded-xl border font-mono text-xs overflow-x-auto ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-300' : 'bg-stone-900 border-stone-800 text-stone-200'}`}>
-                <pre>{selectedJavaFile.content}</pre>
-              </div>
             </div>
+          )}
 
-            <div className="mt-6 pt-4 border-t border-stone-200 dark:border-zinc-800 flex items-center justify-between text-xs text-stone-400 dark:text-zinc-500 font-mono">
-              <span>Architettura Spring Boot 3.2 • REST API & JPA Persistence</span>
-              <span>Aura Backend Console</span>
-            </div>
-          </div>
-
-        </main>
-      )}
-
-      {/* EDIT PROFILE MODAL */}
-      {isEditingProfile && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <motion.div 
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className={`w-full max-w-md p-6 rounded-2xl border shadow-2xl ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-base">Modifica Profilo & Saldi Iniziali</h3>
-              <button 
-                onClick={() => setIsEditingProfile(false)}
-                className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 text-lg cursor-pointer"
-              >
-                ×
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveProfile} className="space-y-4">
-              <div>
-                <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1">Nome Utente</label>
-                <input 
-                  type="text" 
-                  required
-                  value={tempName}
-                  onChange={(e) => setTempName(e.target.value)}
-                  className={`w-full rounded-lg px-3 py-2 text-sm transition focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1">Password</label>
-                <input 
-                  type="password" 
-                  value={tempPassword}
-                  onChange={(e) => setTempPassword(e.target.value)}
-                  className={`w-full rounded-lg px-3 py-2 text-sm transition focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
-                />
-              </div>
-
-              <AvatarSelector 
-                selectedUrl={tempAvatarUrl} 
-                onSelect={(url) => setTempAvatarUrl(url)} 
-                isDarkMode={isDarkMode} 
-              />
-
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div>
-                  <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1">💳 Partenza Carta (€)</label>
-                  <input 
-                    type="number" 
-                    step="any"
-                    value={tempInitialCard}
-                    onChange={(e) => setTempInitialCard(e.target.value)}
-                    className={`w-full rounded-lg px-3 py-2 text-sm transition focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1">💵 Partenza Contanti (€)</label>
-                  <input 
-                    type="number" 
-                    step="any"
-                    value={tempInitialCash}
-                    onChange={(e) => setTempInitialCash(e.target.value)}
-                    className={`w-full rounded-lg px-3 py-2 text-sm transition focus:outline-none ${isDarkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-100' : 'bg-stone-50 border-stone-200 text-stone-800'}`}
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 space-y-2">
-                <button
-                  type="submit"
-                  className="w-full py-2.5 rounded-lg bg-black text-white dark:bg-zinc-100 dark:text-black font-semibold text-xs transition hover:opacity-90 cursor-pointer"
-                >
-                  Salva Modifiche Profilo
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="w-full py-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-500 font-semibold transition hover:bg-rose-500/20 cursor-pointer text-center flex items-center justify-center gap-1.5"
-                >
-                  <LogOut className="w-3.5 h-3.5" /> Esci / Disconnetti
-                </button>
-              </div>
-            </form>
-          </motion.div>
         </div>
       )}
 
-    </div>
-  );
-}
+      {/* FOOTER */}
+      <footer className={`py-4 px-6 md:px-8 border-t text-center text-[11px] font-mono tracking-widest transition-colors duration-300 ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-500' : 'bg-stone-50 border-stone-200 text-stone-400'}`}>
+        <span>AURA CALENDARIO & FINANZA</span>
+      </footer>
 
-// Subcomponent: App Logo SVG Icon
-function AppLogo() {
-  return (
-    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-white font-bold font-mono text-sm shadow-sm">
-      A
-    </div>
-  );
-}
-
-// Subcomponent: Avatar Preset Selector Grid
-function AvatarSelector({ selectedUrl, onSelect, isDarkMode }: { selectedUrl: string; onSelect: (url: string) => void; isDarkMode: boolean }) {
-  return (
-    <div>
-      <label className="block text-xs font-mono uppercase text-stone-400 dark:text-zinc-500 mb-1.5 font-semibold">Scegli Avatar</label>
-      <div className="flex flex-wrap gap-2">
-        {AVATAR_PRESETS.map((emoji) => (
-          <button
-            key={emoji}
-            type="button"
-            onClick={() => onSelect(emoji)}
-            className={`w-9 h-9 rounded-xl text-lg flex items-center justify-center border transition cursor-pointer ${
-              selectedUrl === emoji
-                ? 'border-amber-500 bg-amber-500/20 scale-105 ring-2 ring-amber-500/30'
-                : (isDarkMode ? 'border-zinc-800 bg-zinc-950 hover:border-zinc-700' : 'border-stone-200 bg-stone-50 hover:bg-stone-100')
-            }`}
-          >
-            {emoji}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Subcomponent: Recursive Tree Item Renderer for Java Project Structure
-function TreeRenderer({ items, selectedFile, onSelectFile, expandedFolders, onToggleFolder }: {
-  items: (JavaFolder | JavaFile)[];
-  selectedFile: JavaFile;
-  onSelectFile: (file: JavaFile) => void;
-  expandedFolders: Record<string, boolean>;
-  onToggleFolder: (path: string) => void;
-}) {
-  return (
-    <div className="space-y-1">
-      {items.map((item) => {
-        if (item.type === 'folder') {
-          const isExpanded = !!expandedFolders[item.path];
-          return (
-            <div key={item.path} className="space-y-1">
-              <div 
-                onClick={() => onToggleFolder(item.path)}
-                className="flex items-center space-x-1.5 py-1 px-1.5 rounded-md hover:bg-stone-100 dark:hover:bg-zinc-800 cursor-pointer text-stone-600 dark:text-zinc-400"
-              >
-                {isExpanded ? <FolderOpen className="w-3.5 h-3.5 text-amber-500" /> : <Folder className="w-3.5 h-3.5 text-amber-500" />}
-                <span className="truncate">{item.name}</span>
-              </div>
-              {isExpanded && item.children && (
-                <div className="pl-3 border-l border-stone-200 dark:border-zinc-800 ml-2">
-                  <TreeRenderer 
-                    items={item.children} 
-                    selectedFile={selectedFile} 
-                    onSelectFile={onSelectFile}
-                    expandedFolders={expandedFolders}
-                    onToggleFolder={onToggleFolder}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        } else {
-          const isSelected = selectedFile.path === item.path;
-          return (
-            <div
-              key={item.path}
-              onClick={() => onSelectFile(item)}
-              className={`flex items-center space-x-1.5 py-1 px-1.5 rounded-md cursor-pointer transition ${
-                isSelected 
-                  ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-semibold' 
-                  : 'hover:bg-stone-100 dark:hover:bg-zinc-800 text-stone-500 dark:text-zinc-400'
-              }`}
-            >
-              <FileCode className="w-3.5 h-3.5 text-cyan-500" />
-              <span className="truncate">{item.name}</span>
-            </div>
-          );
-        }
-      })}
     </div>
   );
 }
