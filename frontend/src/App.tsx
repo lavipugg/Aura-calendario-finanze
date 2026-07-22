@@ -1,3 +1,4 @@
+  TrendingUp, TrendingDown, CreditCard, DollarSign, BookOpen, ChevronLeft, ChevronRight,
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -299,9 +300,18 @@ export default function App() {
     localStorage.setItem('lavinia_devconsole_theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
-  // Migrate legacy root collection data (from older single-user setup) into user's subcollections if user has no transactions
+  // Migrate legacy root collection data (from older single-user setup) into user's subcollections ONCE
   const migrateLegacyDataIfNeeded = async (uid: string) => {
     try {
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists() && userSnap.data().migratedLegacy) {
+        return; // Legacy migration was already completed for this user!
+      }
+
+      // Mark as migrated so this process never runs again for this user
+      await setDoc(userRef, { migratedLegacy: true }, { merge: true });
+
       const userTxsSnap = await getDocs(collection(db, 'users', uid, 'transactions'));
       if (!userTxsSnap.empty) return; // User already has transactions, no migration needed
 
@@ -466,6 +476,7 @@ export default function App() {
         avatarUrl: authAvatarUrl || '😊',
         initialCard: cardVal,
         initialCash: cashVal,
+        migratedLegacy: true,
         createdAt: new Date().toISOString()
       };
 
@@ -577,6 +588,7 @@ export default function App() {
           ...laviniaProfile,
           initialCard: cardVal,
           initialCash: cashVal,
+          migratedLegacy: true,
           createdAt: new Date().toISOString()
         });
         for (const cat of DEFAULT_CATEGORIES) {
