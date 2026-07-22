@@ -9,7 +9,7 @@ import {
   Terminal, Heart, Coffee, Code, Sparkles, Cpu, Layers, 
   Check, Copy, User, Sun, Moon, Save, Plus, Trash2, Calendar as CalendarIcon,
   TrendingUp, TrendingDown, CreditCard, DollarSign, BookOpen, ChevronLeft, ChevronRight,
-  Folder, FolderOpen, FileCode, CheckCircle, HelpCircle, Activity, PiggyBank, Briefcase, LogOut, Wifi, Cloud
+  Folder, FolderOpen, FileCode, CheckCircle, HelpCircle, Activity, PiggyBank, Briefcase, LogOut, Wifi, Cloud, RefreshCw
 } from 'lucide-react';
 import { javaProjectStructure, JavaFile, JavaFolder } from './data/javaStructure';
 import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
@@ -293,6 +293,8 @@ export default function App() {
   });
 
   const [copiedCode, setCopiedCode] = useState(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncSuccess, setSyncSuccess] = useState<boolean>(false);
 
   // Theme effect
   useEffect(() => {
@@ -436,6 +438,75 @@ export default function App() {
       unsubProfile();
     };
   }, [isLoggedIn, activeUserId]);
+
+  // Manual sync button trigger
+  const handleManualSync = async () => {
+    if (!activeUserId || isSyncing) return;
+    setIsSyncing(true);
+    setSyncSuccess(false);
+
+    try {
+      // 1. Fetch Transactions
+      const txsSnap = await getDocs(collection(db, 'users', activeUserId, 'transactions'));
+      const txList: Transaction[] = [];
+      txsSnap.forEach((docSnap) => {
+        txList.push(docSnap.data() as Transaction);
+      });
+      setTransactions(txList);
+
+      // 2. Fetch Daily Notes
+      const notesSnap = await getDocs(collection(db, 'users', activeUserId, 'dailyNotes'));
+      const notesList: DailyNote[] = [];
+      notesSnap.forEach((docSnap) => {
+        notesList.push(docSnap.data() as DailyNote);
+      });
+      setDailyNotes(notesList);
+
+      // 3. Fetch Categories
+      const catsSnap = await getDocs(collection(db, 'users', activeUserId, 'categories'));
+      if (!catsSnap.empty) {
+        const catList: Category[] = [];
+        catsSnap.forEach((docSnap) => {
+          catList.push(docSnap.data() as Category);
+        });
+        const stipendio = catList.find(c => c.id === 'STIPENDIO');
+        const otherExpenses = catList.filter(c => c.id !== 'STIPENDIO');
+        otherExpenses.sort((a, b) => a.label.localeCompare(b.label));
+        setCategories(stipendio ? [stipendio, ...otherExpenses] : otherExpenses);
+      }
+
+      // 4. Fetch User Profile & Balances
+      const userSnap = await getDoc(doc(db, 'users', activeUserId));
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        setProfile({
+          id: activeUserId,
+          name: data.name || activeUserId,
+          password: data.password || '',
+          email: data.email || '',
+          avatarUrl: data.avatarUrl || '😊',
+          preferredLang: 'Italiano'
+        });
+        if (typeof data.initialCard === 'number') {
+          setInitialCard(data.initialCard);
+          setTempInitialCard(data.initialCard.toString());
+        }
+        if (typeof data.initialCash === 'number') {
+          setInitialCash(data.initialCash);
+          setTempInitialCash(data.initialCash.toString());
+        }
+      }
+
+      setSyncSuccess(true);
+      setTimeout(() => {
+        setSyncSuccess(false);
+      }, 2500);
+    } catch (err) {
+      console.error('Manual Sync Error:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Ensure selected transaction category is always valid
   useEffect(() => {
@@ -956,12 +1027,28 @@ export default function App() {
 
         {isLoggedIn && (
           <div className="flex items-center space-x-2 md:space-x-4">
-            {/* Live Cloud Sync Indicator */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-mono font-medium shrink-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <Cloud className="w-3 h-3 text-emerald-500" />
-              <span className="hidden sm:inline">Cloud Sincronizzato</span>
-            </div>
+            {/* Live Cloud Sync Button Trigger */}
+            <button
+              type="button"
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-mono font-medium shrink-0 transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-xs ${
+                syncSuccess
+                  ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 ring-2 ring-emerald-500/30'
+                  : isSyncing
+                    ? 'border-amber-500/50 bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
+              }`}
+              title="Clicca qui per forzare la sincronizzazione manuale con il Cloud"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-500 ${isSyncing ? 'animate-spin text-amber-500' : ''}`} />
+              <span className="hidden sm:inline">
+                {isSyncing ? 'Sincronizzazione...' : syncSuccess ? 'Sincronizzato!' : 'Sincronizza Cloud'}
+              </span>
+              <span className="sm:hidden">
+                {isSyncing ? 'Sync...' : syncSuccess ? 'Ok!' : 'Sync'}
+              </span>
+            </button>
 
             {/* Theme selector */}
             <button 
