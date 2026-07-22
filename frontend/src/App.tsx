@@ -9,9 +9,11 @@ import {
   Terminal, Heart, Coffee, Code, Sparkles, Cpu, Layers, 
   Check, Copy, User, Sun, Moon, Save, Plus, Trash2, Calendar as CalendarIcon,
   TrendingUp, TrendingDown, CreditCard, DollarSign, BookOpen, ChevronLeft, ChevronRight,
-  Folder, FolderOpen, FileCode, CheckCircle, HelpCircle, Activity, PiggyBank, Briefcase, LogOut
+  Folder, FolderOpen, FileCode, CheckCircle, HelpCircle, Activity, PiggyBank, Briefcase, LogOut, Wifi, Cloud
 } from 'lucide-react';
 import { javaProjectStructure, JavaFile, JavaFolder } from './data/javaStructure';
+import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { db } from './lib/firebase';
 
 // Standard Interfaces
 interface Transaction {
@@ -359,6 +361,72 @@ export default function App() {
     localStorage.setItem('lavinia_finance_categories_v2', JSON.stringify(categories));
   }, [categories]);
 
+  // Real-time Cloud Sync with Firebase Firestore across PC & Mobile
+  useEffect(() => {
+    // 1. Real-time Transactions Listener
+    const unsubTxs = onSnapshot(collection(db, 'transactions'), (snapshot) => {
+      const txList: Transaction[] = [];
+      snapshot.forEach((docSnap) => {
+        txList.push(docSnap.data() as Transaction);
+      });
+      if (txList.length > 0) {
+        setTransactions(txList);
+      }
+    }, (err) => console.error('Firestore Txs Sync:', err));
+
+    // 2. Real-time Daily Notes Listener
+    const unsubNotes = onSnapshot(collection(db, 'dailyNotes'), (snapshot) => {
+      const notesList: DailyNote[] = [];
+      snapshot.forEach((docSnap) => {
+        notesList.push(docSnap.data() as DailyNote);
+      });
+      if (notesList.length > 0) {
+        setDailyNotes(notesList);
+      }
+    }, (err) => console.error('Firestore Notes Sync:', err));
+
+    // 3. Real-time Categories Listener
+    const unsubCats = onSnapshot(collection(db, 'categories'), (snapshot) => {
+      if (snapshot.empty) {
+        DEFAULT_CATEGORIES.forEach(cat => {
+          setDoc(doc(db, 'categories', cat.id), cat).catch(console.error);
+        });
+      } else {
+        const catList: Category[] = [];
+        snapshot.forEach((docSnap) => {
+          catList.push(docSnap.data() as Category);
+        });
+        const stipendio = catList.find(c => c.id === 'STIPENDIO');
+        const otherExpenses = catList.filter(c => c.id !== 'STIPENDIO');
+        otherExpenses.sort((a, b) => a.label.localeCompare(b.label));
+        setCategories(stipendio ? [stipendio, ...otherExpenses] : otherExpenses);
+      }
+    }, (err) => console.error('Firestore Cats Sync:', err));
+
+    // 4. Real-time Profile & Starting Balances Listener
+    const unsubProfile = onSnapshot(doc(db, 'userProfile', 'mainProfile'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.profile) setProfile(data.profile);
+        if (typeof data.initialCard === 'number') {
+          setInitialCard(data.initialCard);
+          setTempInitialCard(data.initialCard.toString());
+        }
+        if (typeof data.initialCash === 'number') {
+          setInitialCash(data.initialCash);
+          setTempInitialCash(data.initialCash.toString());
+        }
+      }
+    }, (err) => console.error('Firestore Profile Sync:', err));
+
+    return () => {
+      unsubTxs();
+      unsubNotes();
+      unsubCats();
+      unsubProfile();
+    };
+  }, []);
+
   // Ensure selected transaction category is always valid
   useEffect(() => {
     const expenseCats = categories.filter(c => !c.isIncome);
@@ -382,9 +450,18 @@ export default function App() {
   // Login handler
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setInitialCard(parseFloat(tempInitialCard) || 0);
-    setInitialCash(parseFloat(tempInitialCash) || 0);
+    const cardVal = parseFloat(tempInitialCard) || 0;
+    const cashVal = parseFloat(tempInitialCash) || 0;
+    setInitialCard(cardVal);
+    setInitialCash(cashVal);
     setIsLoggedIn(true);
+
+    // Sync to Cloud
+    setDoc(doc(db, 'userProfile', 'mainProfile'), {
+      profile,
+      initialCard: cardVal,
+      initialCash: cashVal
+    }, { merge: true }).catch(console.error);
   };
 
   // Sync edit profile form fields
@@ -409,10 +486,19 @@ export default function App() {
       email: tempEmail,
       avatarUrl: tempAvatarUrl
     };
+    const cardVal = parseFloat(tempInitialCard) || 0;
+    const cashVal = parseFloat(tempInitialCash) || 0;
     setProfile(updated);
-    setInitialCard(parseFloat(tempInitialCard) || 0);
-    setInitialCash(parseFloat(tempInitialCash) || 0);
+    setInitialCard(cardVal);
+    setInitialCash(cashVal);
     setIsEditingProfile(false);
+
+    // Sync to Cloud
+    setDoc(doc(db, 'userProfile', 'mainProfile'), {
+      profile: updated,
+      initialCard: cardVal,
+      initialCash: cashVal
+    }, { merge: true }).catch(console.error);
   };
 
   // Format Helper: date string from Date object
@@ -424,14 +510,19 @@ export default function App() {
 
   // Save note and emotions for currently selected day
   const handleSaveNote = () => {
+    const noteObj = { date: selectedDateStr, content: dayNotesContent, emotions: dayEmotions };
+    
     const existingIndex = dailyNotes.findIndex(n => n.date === selectedDateStr);
     if (existingIndex >= 0) {
       const updated = [...dailyNotes];
-      updated[existingIndex] = { date: selectedDateStr, content: dayNotesContent, emotions: dayEmotions };
+      updated[existingIndex] = noteObj;
       setDailyNotes(updated);
     } else {
-      setDailyNotes([...dailyNotes, { date: selectedDateStr, content: dayNotesContent, emotions: dayEmotions }]);
+      setDailyNotes([...dailyNotes, noteObj]);
     }
+
+    // Sync to Cloud
+    setDoc(doc(db, 'dailyNotes', selectedDateStr), noteObj).catch(console.error);
   };
 
   // Toggle emotion helper
@@ -461,14 +552,20 @@ export default function App() {
       notes: txNotes.trim()
     };
 
-    setTransactions([...transactions, newTx]);
+    setTransactions(prev => [...prev, newTx]);
     setTxAmount('');
     setTxNotes('');
+
+    // Sync to Cloud
+    setDoc(doc(db, 'transactions', newTx.id), newTx).catch(console.error);
   };
 
   // Delete transaction
   const handleDeleteTransaction = (id: string) => {
-    setTransactions(transactions.filter(t => t.id !== id));
+    setTransactions(prev => prev.filter(t => t.id !== id));
+
+    // Delete from Cloud
+    deleteDoc(doc(db, 'transactions', id)).catch(console.error);
   };
 
   // Add a dynamic custom category
@@ -494,7 +591,6 @@ export default function App() {
 
     setCategories(prev => {
       const updated = [...prev, newCategory];
-      // Keep STIPENDIO first, sort everything else alphabetically
       const stipendio = updated.find(c => c.id === 'STIPENDIO');
       const otherExpenses = updated.filter(c => c.id !== 'STIPENDIO');
       otherExpenses.sort((a, b) => a.label.localeCompare(b.label));
@@ -502,12 +598,18 @@ export default function App() {
     });
 
     setNewCatLabel('');
+
+    // Sync to Cloud
+    setDoc(doc(db, 'categories', newCategory.id), newCategory).catch(console.error);
   };
 
   // Delete a custom category
   const handleDeleteCategory = (catId: string) => {
     if (catId === 'STIPENDIO') return;
     setCategories(prev => prev.filter(c => c.id !== catId));
+
+    // Delete from Cloud
+    deleteDoc(doc(db, 'categories', catId)).catch(console.error);
   };
 
   // Finance calculations
@@ -661,6 +763,13 @@ export default function App() {
 
         {isLoggedIn && (
           <div className="flex items-center space-x-2 md:space-x-4">
+            {/* Live Cloud Sync Indicator */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-mono font-medium shrink-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <Cloud className="w-3 h-3 text-emerald-500" />
+              <span className="hidden sm:inline">Cloud Sincronizzato</span>
+            </div>
+
             {/* Theme selector */}
             <button 
               onClick={handleThemeToggle}
@@ -720,17 +829,27 @@ export default function App() {
             <button
               type="button"
               onClick={() => {
-                setProfile({
+                const laviniaProfile = {
                   id: '1',
                   name: 'Lavinia',
                   password: 'password123',
                   email: 'lavinia@example.com',
                   avatarUrl: '😊',
                   preferredLang: 'Italiano'
-                });
-                setInitialCard(parseFloat(tempInitialCard) || 0);
-                setInitialCash(parseFloat(tempInitialCash) || 0);
+                };
+                const cardVal = parseFloat(tempInitialCard) || 0;
+                const cashVal = parseFloat(tempInitialCash) || 0;
+                setProfile(laviniaProfile);
+                setInitialCard(cardVal);
+                setInitialCash(cashVal);
                 setIsLoggedIn(true);
+
+                // Sync to Cloud
+                setDoc(doc(db, 'userProfile', 'mainProfile'), {
+                  profile: laviniaProfile,
+                  initialCard: cardVal,
+                  initialCash: cashVal
+                }, { merge: true }).catch(console.error);
               }}
               className="w-full mb-5 py-3 px-4 rounded-xl border border-amber-500/50 bg-amber-500/20 hover:bg-amber-500/30 text-amber-600 dark:text-amber-400 font-bold text-sm shadow-xs transition cursor-pointer flex items-center justify-center gap-2 font-mono ring-2 ring-amber-500/20"
             >

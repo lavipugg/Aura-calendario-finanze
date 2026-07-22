@@ -299,6 +299,14 @@ public class User {
         this.password = password;
     }
 
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
+
     public List<Transaction> getTransactions() {
         return transactions;
     }

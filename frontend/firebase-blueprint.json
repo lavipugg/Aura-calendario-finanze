@@ -1,0 +1,44 @@
+{
+  "entities": [
+    {
+      "name": "UserProfile",
+      "collection": "userProfile",
+      "fields": [
+        { "name": "name", "type": "string", "required": true },
+        { "name": "avatarUrl", "type": "string", "required": false },
+        { "name": "initialCard", "type": "number", "required": false },
+        { "name": "initialCash", "type": "number", "required": false }
+      ]
+    },
+    {
+      "name": "Transaction",
+      "collection": "transactions",
+      "fields": [
+        { "name": "date", "type": "string", "required": true },
+        { "name": "amount", "type": "number", "required": true },
+        { "name": "type", "type": "string", "required": true },
+        { "name": "method", "type": "string", "required": true },
+        { "name": "category", "type": "string", "required": true },
+        { "name": "notes", "type": "string", "required": false }
+      ]
+    },
+    {
+      "name": "DailyNote",
+      "collection": "dailyNotes",
+      "fields": [
+        { "name": "date", "type": "string", "required": true },
+        { "name": "content", "type": "string", "required": true },
+        { "name": "emotions", "type": "array", "required": false }
+      ]
+    },
+    {
+      "name": "Category",
+      "collection": "categories",
+      "fields": [
+        { "name": "label", "type": "string", "required": true },
+        { "name": "color", "type": "string", "required": true },
+        { "name": "isIncome", "type": "boolean", "required": true }
+      ]
+    }
+  ]
+}
