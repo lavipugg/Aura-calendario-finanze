@@ -296,6 +296,14 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncSuccess, setSyncSuccess] = useState<boolean>(false);
 
+  // Delete Confirmation Modal State
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
   // Theme effect
   useEffect(() => {
     localStorage.setItem('lavinia_devconsole_theme', isDarkMode ? 'dark' : 'light');
@@ -874,6 +882,33 @@ export default function App() {
 
     // Delete from Cloud
     deleteDoc(doc(db, 'users', activeUserId, 'categories', catId)).catch(console.error);
+  };
+
+  // Request Delete Confirmation Handlers
+  const requestDeleteTransaction = (tx: Transaction) => {
+    const catInfo = categories.find(c => c.id === tx.category);
+    const txLabel = tx.notes || catInfo?.label || 'Movimento';
+    setDeleteConfirmModal({
+      isOpen: true,
+      title: 'Sei sicuro?',
+      message: `Vuoi davvero eliminare "${txLabel}" (${tx.amount.toFixed(2)} €)?`,
+      onConfirm: () => {
+        handleDeleteTransaction(tx.id);
+        setDeleteConfirmModal(null);
+      }
+    });
+  };
+
+  const requestDeleteCategory = (cat: Category) => {
+    setDeleteConfirmModal({
+      isOpen: true,
+      title: 'Sei sicuro?',
+      message: `Vuoi davvero eliminare la categoria "${cat.label}"?`,
+      onConfirm: () => {
+        handleDeleteCategory(cat.id);
+        setDeleteConfirmModal(null);
+      }
+    });
   };
 
   // Finance calculations
@@ -1516,7 +1551,7 @@ export default function App() {
                           {!isStipendio && (
                             <button
                               type="button"
-                              onClick={() => handleDeleteCategory(cat.id)}
+                              onClick={() => requestDeleteCategory(cat)}
                               className="ml-1 text-stone-400 hover:text-red-500 hover:bg-red-500/10 p-0.5 rounded transition cursor-pointer"
                               title={`Elimina "${cat.label}"`}
                             >
@@ -1788,7 +1823,7 @@ export default function App() {
                                   {tx.type === 'ENTRATA' ? '+' : '-'}{tx.amount.toFixed(2)} €
                                 </span>
                                 <button 
-                                  onClick={() => handleDeleteTransaction(tx.id)}
+                                  onClick={() => requestDeleteTransaction(tx)}
                                   className="p-1 rounded text-stone-400 hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
                                   title="Rimuovi"
                                 >
@@ -1979,6 +2014,53 @@ export default function App() {
 
         </div>
       )}
+
+      {/* CONFIRMATION POP-UP MODAL */}
+      <AnimatePresence>
+        {deleteConfirmModal?.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className={`max-w-sm w-full rounded-2xl border p-6 shadow-2xl transition-colors ${
+                isDarkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-stone-200 text-stone-800'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-mono">{deleteConfirmModal.title}</h3>
+                  <p className="text-xs text-stone-500 dark:text-zinc-400 mt-0.5">{deleteConfirmModal.message}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 mt-6 pt-2 font-mono text-xs">
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmModal(null)}
+                  className={`flex-1 py-2.5 rounded-xl border font-semibold transition cursor-pointer ${
+                    isDarkMode
+                      ? 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700'
+                      : 'bg-stone-100 border-stone-200 text-stone-700 hover:bg-stone-200'
+                  }`}
+                >
+                  No, Annulla
+                </button>
+                <button
+                  type="button"
+                  onClick={() => deleteConfirmModal.onConfirm()}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold transition cursor-pointer shadow-xs"
+                >
+                  Sì, Elimina
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* FOOTER */}
       <footer className={`py-4 px-6 md:px-8 border-t text-center text-[11px] font-mono tracking-widest transition-colors duration-300 ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-500' : 'bg-stone-50 border-stone-200 text-stone-400'}`}>
