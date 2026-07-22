@@ -1,4 +1,3 @@
-  TrendingUp, TrendingDown, CreditCard, DollarSign, BookOpen, ChevronLeft, ChevronRight,
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -313,8 +312,7 @@ export default function App() {
       await setDoc(userRef, { migratedLegacy: true }, { merge: true });
 
       const userTxsSnap = await getDocs(collection(db, 'users', uid, 'transactions'));
-      if (!userTxsSnap.empty) return; // User already has transactions, no migration needed
-
+      
       // Check legacy root collections
       const rootTxsSnap = await getDocs(collection(db, 'transactions'));
       const rootNotesSnap = await getDocs(collection(db, 'dailyNotes'));
@@ -331,19 +329,33 @@ export default function App() {
         }
       }
 
-      // Copy root transactions to user's transactions
-      if (!rootTxsSnap.empty) {
+      // Copy root transactions to user's transactions ONLY if user has no transactions yet
+      if (userTxsSnap.empty && !rootTxsSnap.empty) {
         for (const docSnap of rootTxsSnap.docs) {
           const tx = docSnap.data();
           await setDoc(doc(db, 'users', uid, 'transactions', docSnap.id), tx);
+          // Delete from legacy root collection so it can never resurrect deleted transactions
+          await deleteDoc(doc(db, 'transactions', docSnap.id)).catch(() => {});
+        }
+      } else if (!rootTxsSnap.empty) {
+        // Clean up legacy root transactions
+        for (const docSnap of rootTxsSnap.docs) {
+          await deleteDoc(doc(db, 'transactions', docSnap.id)).catch(() => {});
         }
       }
 
       // Copy root daily notes to user's daily notes
-      if (!rootNotesSnap.empty) {
+      const userNotesSnap = await getDocs(collection(db, 'users', uid, 'dailyNotes'));
+      if (userNotesSnap.empty && !rootNotesSnap.empty) {
         for (const docSnap of rootNotesSnap.docs) {
           const note = docSnap.data();
           await setDoc(doc(db, 'users', uid, 'dailyNotes', docSnap.id), note);
+          await deleteDoc(doc(db, 'dailyNotes', docSnap.id)).catch(() => {});
+        }
+      } else if (!rootNotesSnap.empty) {
+        // Clean up legacy root daily notes
+        for (const docSnap of rootNotesSnap.docs) {
+          await deleteDoc(doc(db, 'dailyNotes', docSnap.id)).catch(() => {});
         }
       }
     } catch (err) {
@@ -735,12 +747,18 @@ export default function App() {
   };
 
   // Delete transaction
-  const handleDeleteTransaction = (id: string) => {
+  const handleDeleteTransaction = async (id: string) => {
     if (!activeUserId) return;
     setTransactions(prev => prev.filter(t => t.id !== id));
 
-    // Delete from Cloud
-    deleteDoc(doc(db, 'users', activeUserId, 'transactions', id)).catch(console.error);
+    try {
+      // Delete from active user's subcollection
+      await deleteDoc(doc(db, 'users', activeUserId, 'transactions', id));
+      // Delete from legacy root collection if present
+      await deleteDoc(doc(db, 'transactions', id)).catch(() => {});
+    } catch (err) {
+      console.error('Error deleting transaction from cloud:', err);
+    }
   };
 
   // Add a dynamic custom category
